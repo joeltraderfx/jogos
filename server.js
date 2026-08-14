@@ -5,7 +5,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json({ limit: '256kb' }));
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(__dirname));
 
 // Simple in-memory room store. Good enough for a live demo — resets if the
 // server restarts or redeploys, which on Render's free tier can also happen
