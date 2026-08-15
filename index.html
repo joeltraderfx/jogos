@@ -226,6 +226,33 @@ button{font-family:'Inter',sans-serif;}
 
   /* ---------------- Team data ---------------- */
   const SHIRT_PATH = "M22 4 L8 14 L14 24 L20 19 L20 54 Q20 57 23 57 L37 57 Q40 57 40 54 L40 19 L46 24 L52 14 L38 4 Q34 8 30 8 Q26 8 22 4 Z";
+
+  // Humanoid goalkeeper: shadow, back leg, back arm, torso, collar, front leg,
+  // front arm, head, hair — layered so limbs read as a body, not boxes.
+  const KEEPER_SVG =
+    '<svg viewBox="0 0 50 90">'+
+      '<ellipse cx="25" cy="86" rx="15" ry="3" fill="#000" opacity="0.22"/>'+
+      '<path d="M20 56 Q13 70 11 84" stroke="#14161f" stroke-width="9" stroke-linecap="round" fill="none"/>'+
+      '<ellipse cx="10" cy="85" rx="6.5" ry="4" fill="#0a0a0a"/>'+
+      '<path d="M17 30 Q5 26 4 12" stroke="#f0dcc0" stroke-width="8" stroke-linecap="round" fill="none"/>'+
+      '<circle cx="4" cy="10" r="6" fill="#ff8a00"/>'+
+      '<path d="M13 22 Q11 42 15 56 L33 56 Q37 42 35 22 Q24 15 13 22 Z" fill="#d9e02b"/>'+
+      '<path d="M17 23 Q24 28 31 23" stroke="#191b24" stroke-width="3.5" fill="none" stroke-linecap="round"/>'+
+      '<path d="M30 56 Q37 70 39 84" stroke="#14161f" stroke-width="9" stroke-linecap="round" fill="none"/>'+
+      '<ellipse cx="40" cy="85" rx="6.5" ry="4" fill="#0a0a0a"/>'+
+      '<path d="M33 28 Q45 24 46 10" stroke="#f0dcc0" stroke-width="8" stroke-linecap="round" fill="none"/>'+
+      '<circle cx="46" cy="9" r="6" fill="#ff8a00"/>'+
+      '<circle cx="24" cy="12" r="8.5" fill="#e8b98a"/>'+
+      '<path d="M16 9 Q24 1 32 9 Q31 4 24 3 Q17 4 16 9 Z" fill="#2a1c12"/>'+
+    '</svg>';
+
+  const BALL_SVG =
+    '<svg viewBox="0 0 40 40">'+
+      '<circle cx="20" cy="20" r="18" fill="#f5f5f5" stroke="#c8c8c8" stroke-width="1"/>'+
+      '<polygon points="20,8 27,13 24,21 16,21 13,13" fill="#141414"/>'+
+      '<polygon points="6,17 12,14 12,23 7,26" fill="#141414" opacity="0.9"/>'+
+      '<polygon points="34,17 28,14 28,23 33,26" fill="#141414" opacity="0.9"/>'+
+    '</svg>';
   const TEAMS = [
     {id:'cor',  name:'Corinthians',           cat:'brasileiro',    colors:['#ffffff','#0a0a0a'], pattern:'solid'},
     {id:'pal',  name:'Palmeiras',             cat:'brasileiro',    colors:['#0e6b3a','#ffffff'], pattern:'solid'},
@@ -540,7 +567,7 @@ button{font-family:'Inter',sans-serif;}
     pollTimer = setInterval(refreshRoom, 1600);
   }
   async function refreshRoom(){
-    if(!roomCode || shotInProgress) return;
+    if(!roomCode || shotInProgress || replayInProgress) return;
     const r = await storeGet('room:'+roomCode);
     if(!r) return;
     room = r;
@@ -549,13 +576,6 @@ button{font-family:'Inter',sans-serif;}
 
   /* ---------------- Room rendering ---------------- */
   const roomContent = document.getElementById('roomContent');
-
-  function renderRoomScreen(){
-    if(!room) return;
-    if(room.status === 'lobby') return renderLobby();
-    if(room.status === 'playing') return renderPlaying();
-    if(room.status === 'finished') return renderResults();
-  }
 
   function renderLobby(){
     let html = '<div class="home-card">';
@@ -584,10 +604,11 @@ button{font-family:'Inter',sans-serif;}
 
   async function startGame(){
     const fresh = await storeGet('room:'+roomCode) || room;
-    fresh.status = 'playing'; fresh.round = 1; fresh.turnIndex = 0; fresh.updatedAt = Date.now();
+    fresh.status = 'playing'; fresh.round = 1; fresh.turnIndex = 0; fresh.lastShot = null; fresh.updatedAt = Date.now();
     await storeSet('room:'+roomCode, fresh);
     room = fresh;
     lastRenderedTurnKey = null;
+    lastShownShotTs = null;
     ensureAudio(); sfxWhistle();
     renderRoomScreen();
   }
@@ -618,6 +639,30 @@ button{font-family:'Inter',sans-serif;}
   }
 
   let lastRenderedTurnKey = null;
+  let lastShownShotTs = null;
+  let replayInProgress = false;
+
+  function renderRoomScreen(){
+    if(!room) return;
+    const freshShot = room.lastShot && room.lastShot.by !== myId && room.lastShot.ts !== lastShownShotTs && room.status !== 'lobby';
+    if(freshShot){
+      lastShownShotTs = room.lastShot.ts;
+      lastRenderedTurnKey = null;
+      replayInProgress = true;
+      renderShotReplay(room.lastShot, ()=>{
+        replayInProgress = false;
+        dispatchByStatus();
+      });
+      return;
+    }
+    dispatchByStatus();
+  }
+
+  function dispatchByStatus(){
+    if(room.status === 'lobby') return renderLobby();
+    if(room.status === 'playing') return renderPlaying();
+    if(room.status === 'finished') return renderResults();
+  }
 
   function renderPlaying(){
     const active = room.players[room.turnIndex];
@@ -631,19 +676,69 @@ button{font-family:'Inter',sans-serif;}
       renderActiveTurn();
     } else {
       lastRenderedTurnKey = null; // reset so my next turn renders fresh
-      const t = teamById(active.teamId);
-      let html = '<div class="turn-banner"><div class="who">Vez de '+active.name+'</div><div class="round">Rodada '+room.round+' de 5</div></div>';
-      html += scoreboardHTML();
-      html += '<div class="wait-msg">Aguarde sua vez — a tela atualiza automaticamente.</div>';
-      roomContent.innerHTML = html;
+      renderWaitingView(active);
     }
   }
 
-  /* ---------------- Active shooter UI (stadium scene) ---------------- */
-  function renderActiveTurn(){
+  function renderWaitingView(active){
+    let html = '<div class="turn-banner"><div class="who">Vez de '+active.name+'</div><div class="round">Rodada '+room.round+' de 5</div></div>';
+    html += scoreboardHTML();
+    html += '<div class="wait-msg">Aguarde sua vez — você vai ver a jogada assim que ela acontecer.</div>';
+    roomContent.innerHTML = html;
+  }
+
+  /* ---------------- Spectator replay of another player's shot ---------------- */
+  function renderShotReplay(shotData, onDone){
+    const t = teamById(shotData.teamId);
     roomContent.innerHTML =
-      '<div class="turn-banner"><div class="who">Sua vez de chutar!</div><div class="round">Rodada '+room.round+' de 5</div></div>'+
-      '<div class="stadium-scene" id="scene">'+
+      '<div class="turn-banner"><div class="who">Chute de '+shotData.byName+'</div><div class="round">Rodada '+room.round+' de 5</div></div>'+
+      stadiumSceneHTML()+
+      '<div class="message-banner" id="messageBanner"></div>'+
+      scoreboardHTML();
+
+    const ballWrap = document.getElementById('ballWrap');
+    const ballShadow = document.getElementById('ballShadow');
+    const keeperBody = document.getElementById('keeperBody');
+    const banner = document.getElementById('messageBanner');
+    const netFlash = document.getElementById('netFlash');
+
+    ensureAudio(); sfxKick();
+
+    requestAnimationFrame(()=>{
+      ballWrap.style.left = (shotData.x/800*100) + '%';
+      ballWrap.style.top = (shotData.y/500*100) + '%';
+      ballWrap.classList.add('flying');
+      ballShadow.style.left = (shotData.x/800*100) + '%';
+      ballShadow.style.top = ((shotData.y+150)/500*100) + '%';
+      ballShadow.style.opacity = '0.15';
+      if(shotData.chosenZone){ keeperBody.className = 'keeper-body dive-' + shotData.chosenZone; }
+    });
+
+    setTimeout(()=>{
+      banner.classList.remove('goal','miss');
+      if(shotData.result === 'goal'){
+        const isCorner = shotData.shotZone === 'left-high' || shotData.shotZone === 'right-high';
+        banner.textContent = isCorner ? 'GOOOL no ângulo!' : 'GOOOL!';
+        banner.classList.add('goal','show');
+        netFlash.classList.add('show');
+        sfxNet(); setTimeout(sfxCheer, 120);
+      } else if(shotData.result === 'save'){
+        banner.textContent = 'Defesa do goleiro!';
+        banner.classList.add('miss','show');
+        sfxSigh();
+      } else {
+        banner.textContent = 'Para fora!';
+        banner.classList.add('miss','show');
+        sfxSigh();
+      }
+    }, 440);
+
+    setTimeout(onDone, 2000);
+  }
+
+  /* ---------------- Shared stadium scene markup ---------------- */
+  function stadiumSceneHTML(){
+    return '<div class="stadium-scene" id="scene">'+
         '<svg class="bg" viewBox="0 0 800 500" preserveAspectRatio="none">'+
           '<defs>'+
             '<linearGradient id="skyGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#0a1626"/><stop offset="100%" stop-color="#2c4f74"/></linearGradient>'+
@@ -671,23 +766,16 @@ button{font-family:'Inter',sans-serif;}
         '<div class="goal-click-area" id="goalClickArea"></div>'+
         '<div class="aim-reticle" id="aimReticle"><svg viewBox="0 0 26 26"><circle cx="13" cy="13" r="10" fill="none" stroke="#ffd876" stroke-width="2"/><line x1="13" y1="0" x2="13" y2="7" stroke="#ffd876" stroke-width="2"/><line x1="13" y1="19" x2="13" y2="26" stroke="#ffd876" stroke-width="2"/><line x1="0" y1="13" x2="7" y2="13" stroke="#ffd876" stroke-width="2"/><line x1="19" y1="13" x2="26" y2="13" stroke="#ffd876" stroke-width="2"/></svg></div>'+
         '<div class="net-flash" id="netFlash"></div>'+
-        '<div class="goalkeeper" id="goalkeeper"><div class="keeper-body" id="keeperBody"><svg viewBox="0 0 40 74">'+
-          '<ellipse cx="20" cy="70" rx="14" ry="3" fill="#000" opacity="0.25"/>'+
-          '<rect x="6" y="30" width="10" height="30" rx="4" fill="#f4e6c8" transform="rotate(-18 6 30)"/>'+
-          '<rect x="24" y="30" width="10" height="30" rx="4" fill="#f4e6c8" transform="rotate(18 34 30)"/>'+
-          '<rect x="11" y="18" width="18" height="34" rx="6" fill="#d9e02b"/>'+
-          '<rect x="10" y="20" width="20" height="8" rx="3" fill="#191b24"/>'+
-          '<circle cx="20" cy="10" r="9" fill="#e8b98a"/>'+
-          '<rect x="9" y="46" width="9" height="22" rx="4" fill="#191b24"/><rect x="22" y="46" width="9" height="22" rx="4" fill="#191b24"/>'+
-          '<rect x="7" y="64" width="12" height="6" rx="2" fill="#0a0a0a"/><rect x="21" y="64" width="12" height="6" rx="2" fill="#0a0a0a"/>'+
-        '</svg></div></div>'+
-        '<div class="ball-wrap" id="ballWrap"><svg viewBox="0 0 40 40">'+
-          '<circle cx="20" cy="20" r="18" fill="#f5f5f5" stroke="#c8c8c8" stroke-width="1"/>'+
-          '<polygon points="20,8 27,13 24,21 16,21 13,13" fill="#141414"/>'+
-          '<polygon points="6,17 12,14 12,23 7,26" fill="#141414" opacity="0.9"/>'+
-          '<polygon points="34,17 28,14 28,23 33,26" fill="#141414" opacity="0.9"/>'+
-        '</svg></div>'+
-      '</div>'+
+        '<div class="goalkeeper" id="goalkeeper"><div class="keeper-body" id="keeperBody">'+KEEPER_SVG+'</div></div>'+
+        '<div class="ball-wrap" id="ballWrap">'+BALL_SVG+'</div>'+
+      '</div>';
+  }
+
+  /* ---------------- Active shooter UI (stadium scene) ---------------- */
+  function renderActiveTurn(){
+    roomContent.innerHTML =
+      '<div class="turn-banner"><div class="who">Sua vez de chutar!</div><div class="round">Rodada '+room.round+' de 5</div></div>'+
+      stadiumSceneHTML()+
       '<div class="hint" id="hint">Toque na área do gol para mirar o chute.</div>'+
       '<div class="power-panel" id="powerPanel">'+
         '<div class="power-track"><div class="power-fill" id="powerFill"></div></div>'+
@@ -819,10 +907,10 @@ button{font-family:'Inter',sans-serif;}
       keeperBody.className = 'keeper-body dive-' + chosenZone;
     }
 
-    setTimeout(()=>{ resolveOutcome(result, shotZone); }, 440);
+    setTimeout(()=>{ resolveOutcome(result, shotZone, vb, chosenZone); }, 440);
   }
 
-  async function resolveOutcome(result, shotZone){
+  async function resolveOutcome(result, shotZone, vb, chosenZone){
     const banner = document.getElementById('messageBanner');
     const netFlash = document.getElementById('netFlash');
     banner.classList.remove('goal','miss');
@@ -833,7 +921,6 @@ button{font-family:'Inter',sans-serif;}
       const isCorner = shotZone === 'left-high' || shotZone === 'right-high';
       banner.textContent = isCorner ? 'GOOOL no ângulo!' : 'GOOOL!';
       banner.classList.add('goal');
-      const vb = null;
       netFlash.classList.add('show');
       sfxNet(); setTimeout(sfxCheer, 120);
       spawnCoins(12);
@@ -849,17 +936,28 @@ button{font-family:'Inter',sans-serif;}
     banner.classList.add('show');
 
     setTimeout(async ()=>{
-      await advanceTurn(goalScored);
+      await advanceTurn(goalScored, { x:vb.x, y:vb.y, chosenZone, shotZone, result });
     }, 1200);
   }
 
-  async function advanceTurn(goalScored){
+  async function advanceTurn(goalScored, shotInfo){
     const fresh = await storeGet('room:'+roomCode) || room;
     const idx = fresh.players.findIndex(p=>p.id===myId);
     if(idx >= 0){
       fresh.players[idx].attempts += 1;
       if(goalScored) fresh.players[idx].goals += 1;
     }
+    fresh.lastShot = {
+      by: myId,
+      byName: myName,
+      teamId: myTeam.id,
+      x: shotInfo.x, y: shotInfo.y,
+      chosenZone: shotInfo.chosenZone,
+      shotZone: shotInfo.shotZone,
+      result: shotInfo.result,
+      ts: Date.now(),
+    };
+    lastShownShotTs = fresh.lastShot.ts; // don't replay my own shot back to myself
     fresh.turnIndex += 1;
     if(fresh.turnIndex >= fresh.players.length){ fresh.turnIndex = 0; fresh.round += 1; }
     if(fresh.round > 5){ fresh.status = 'finished'; }
@@ -899,10 +997,11 @@ button{font-family:'Inter',sans-serif;}
   async function playAgain(){
     const fresh = await storeGet('room:'+roomCode) || room;
     fresh.players.forEach(p=>{ p.goals = 0; p.attempts = 0; });
-    fresh.status = 'lobby'; fresh.round = 1; fresh.turnIndex = 0; fresh.updatedAt = Date.now();
+    fresh.status = 'lobby'; fresh.round = 1; fresh.turnIndex = 0; fresh.lastShot = null; fresh.updatedAt = Date.now();
     await storeSet('room:'+roomCode, fresh);
     room = fresh;
     lastRenderedTurnKey = null;
+    lastShownShotTs = null;
     renderRoomScreen();
   }
 
