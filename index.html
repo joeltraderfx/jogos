@@ -1237,6 +1237,9 @@ button{font-family:'Inter',sans-serif;}
     }
   }
 
+  let iceQueue = [];
+  let callTimeoutId = null;
+
   function handleSignal(from, data){
     if(!data) return;
     if(data.type === 'call-offer'){
@@ -1245,9 +1248,22 @@ button{font-family:'Inter',sans-serif;}
       document.getElementById('callerName').textContent = data.fromName || peerNameById(from);
       document.getElementById('callIncoming').classList.add('show');
     } else if(data.type === 'call-answer'){
-      if(pc) pc.setRemoteDescription(new RTCSessionDescription(data.sdp)).catch(()=>{});
+      if(pc){
+        pc.setRemoteDescription(new RTCSessionDescription(data.sdp))
+          .then(flushIceQueue)
+          .catch(()=>{});
+      }
     } else if(data.type === 'ice'){
-      if(pc && data.candidate){ pc.addIceCandidate(new RTCIceCandidate(data.candidate)).catch(()=>{}); }
+      if(!data.candidate) return;
+      // The caller can start gathering ICE candidates before the other
+      // person has even tapped "accept" — if our side isn't ready yet
+      // (no peer connection, or remote description not set), queue the
+      // candidate instead of dropping it.
+      if(pc && pc.remoteDescription && pc.remoteDescription.type){
+        pc.addIceCandidate(new RTCIceCandidate(data.candidate)).catch(()=>{});
+      } else {
+        iceQueue.push(data.candidate);
+      }
     } else if(data.type === 'call-end'){
       showToast((peerNameById(from)) + ' encerrou a chamada.');
       endCall(false);
@@ -1255,6 +1271,12 @@ button{font-family:'Inter',sans-serif;}
       showToast(peerNameById(from) + ' recusou a chamada.');
       endCall(false);
     }
+  }
+
+  function flushIceQueue(){
+    if(!pc) return;
+    iceQueue.forEach(c => pc.addIceCandidate(new RTCIceCandidate(c)).catch(()=>{}));
+    iceQueue = [];
   }
 
   function setupPeerConnection(){
@@ -1265,14 +1287,26 @@ button{font-family:'Inter',sans-serif;}
     pc.ontrack = (e)=>{
       document.getElementById('remoteVideo').srcObject = e.streams[0];
       document.getElementById('callStatus').textContent = 'Conectado';
+      if(callTimeoutId){ clearTimeout(callTimeoutId); callTimeoutId = null; }
     };
     pc.oniceconnectionstatechange = ()=>{
       if(!pc) return;
+      if(pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed'){
+        if(callTimeoutId){ clearTimeout(callTimeoutId); callTimeoutId = null; }
+      }
       if(pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected'){
         showToast('Chamada perdida — provavelmente redes diferentes sem servidor de retransmissão.');
         endCall(false);
       }
     };
+    // Safety net: if we never reach a connected state at all, say so clearly
+    // instead of leaving a silent black screen.
+    callTimeoutId = setTimeout(()=>{
+      if(pc && pc.iceConnectionState !== 'connected' && pc.iceConnectionState !== 'completed'){
+        showToast('Não foi possível conectar a chamada — provavelmente redes diferentes sem servidor de retransmissão.');
+        endCall(true);
+      }
+    }, 12000);
   }
 
   async function startCall(peerId){
@@ -1312,6 +1346,7 @@ button{font-family:'Inter',sans-serif;}
     localStream.getTracks().forEach(t=>pc.addTrack(t, localStream));
     document.getElementById('localVideo').srcObject = localStream;
     await pc.setRemoteDescription(new RTCSessionDescription(offer.sdp));
+    flushIceQueue();
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
     sendSignal(offer.from, { type:'call-answer', sdp: answer });
@@ -1327,6 +1362,8 @@ button{font-family:'Inter',sans-serif;}
 
   function endCall(notifyPeer){
     if(notifyPeer && currentCallPeerId){ sendSignal(currentCallPeerId, { type:'call-end' }); }
+    if(callTimeoutId){ clearTimeout(callTimeoutId); callTimeoutId = null; }
+    iceQueue = [];
     if(pc){ try{ pc.close(); }catch(e){} pc = null; }
     if(localStream){ localStream.getTracks().forEach(t=>t.stop()); localStream = null; }
     document.getElementById('remoteVideo').srcObject = null;
