@@ -211,7 +211,7 @@ button{font-family:'Inter',sans-serif;}
   <div class="eyebrow">Estádio Nacional — Multiplayer</div>
   <h1 style="text-align:center; font-size:36px; margin:0;">Pênalti <span style="color:var(--gold-bright)">Decisivo</span></h1>
   <div class="subtitle">Até 4 jogadores, cada um no seu celular, disputando 5 rodadas</div>
-  <div class="demo-badge">● Comunicação Privada — fale o que quiser em sala reservada</div>
+  <div class="demo-badge">● Simulação — capital demo fictício, não convertível em dinheiro real</div>
 
   <!-- SCREEN: HOME -->
   <section class="screen active" id="screen-home">
@@ -1138,12 +1138,16 @@ button{font-family:'Inter',sans-serif;}
 
   function updateChatBadge(msgs){
     const list = msgs || pruneMessages(room && room.messages);
-    const hasUnread = list.some(m => m.to === myId && m.ts > chatSeenTs && !(chatOpen && m.from === chatPeerId));
+    const hasUnread = list.some(m => m.to === myId && m.ts > chatSeenTs && !(isChatOpen() && m.from === chatPeerId));
     chatBadge.classList.toggle('show', hasUnread);
   }
 
   function escapeHtml(s){
     return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function isChatOpen(){
+    return chatPanel.classList.contains('show');
   }
 
   chatFab.addEventListener('click', ()=>{
@@ -1171,6 +1175,10 @@ button{font-family:'Inter',sans-serif;}
     if(ok){
       room = fresh;
       renderChatMessages();
+      // Belt-and-suspenders: guarantee this exact bubble disappears from the
+      // sender's own screen even if the periodic tick below gets delayed
+      // (e.g. the browser throttles timers while the tab is backgrounded).
+      setTimeout(()=>{ if(isChatOpen()) renderChatMessages(); }, CHAT_TTL_MS + 150);
     } else {
       showToast('Não foi possível enviar a mensagem.');
     }
@@ -1181,9 +1189,9 @@ button{font-family:'Inter',sans-serif;}
   // Expire bubbles locally between polls, and refresh the unread badge.
   setInterval(()=>{
     if(!room) return;
-    if(chatOpen) renderChatMessages();
+    if(isChatOpen()) renderChatMessages();
     else updateChatBadge();
-  }, 1000);
+  }, 500);
 
   /* ---------------- Video calling (WebRTC, signaled over our own WebSocket) ---------------- */
   // Media goes directly device-to-device. We only use public STUN servers

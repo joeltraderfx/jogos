@@ -6,7 +6,18 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json({ limit: '256kb' }));
-app.use(express.static(__dirname));
+app.use(express.static(__dirname, {
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.html')) {
+      // Never let phones cache a stale version of the game — this is what
+      // caused some players to see an old build without a feature that was
+      // already deployed.
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+    }
+  }
+}));
 
 // Simple in-memory room store. Good enough for a live demo — resets if the
 // server restarts or redeploys, which on Render's free tier can also happen
