@@ -1,5 +1,6 @@
 const express = require('express');
 const path = require('path');
+const { WebSocketServer } = require('ws');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -24,6 +25,44 @@ app.put('/kv/:key', (req, res) => {
 
 app.get('/health', (req, res) => res.send('ok'));
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log('Pênalti Decisivo server listening on port ' + PORT);
+});
+
+// --- WebRTC signaling relay ---
+// Only tiny JSON messages (offers/answers/ICE candidates) pass through here.
+// The actual video/audio stream goes directly between the two players'
+// devices (peer-to-peer), never through this server.
+const wss = new WebSocketServer({ server, path: '/signal' });
+const rooms = new Map(); // roomCode -> Map(playerId -> ws)
+
+wss.on('connection', (ws, req) => {
+  const url = new URL(req.url, 'http://localhost');
+  const room = url.searchParams.get('room');
+  const id = url.searchParams.get('id');
+  if (!room || !id) { ws.close(); return; }
+
+  if (!rooms.has(room)) rooms.set(room, new Map());
+  rooms.get(room).set(id, ws);
+  ws._room = room;
+  ws._id = id;
+
+  ws.on('message', (raw) => {
+    let msg;
+    try { msg = JSON.parse(raw); } catch (e) { return; }
+    const peers = rooms.get(room);
+    if (!peers || !msg || !msg.to) return;
+    const target = peers.get(msg.to);
+    if (target && target.readyState === target.OPEN) {
+      target.send(JSON.stringify({ from: id, data: msg.data }));
+    }
+  });
+
+  ws.on('close', () => {
+    const peers = rooms.get(room);
+    if (peers) {
+      peers.delete(id);
+      if (peers.size === 0) rooms.delete(room);
+    }
+  });
 });
