@@ -587,6 +587,7 @@ button{font-family:'Inter',sans-serif;}
     fresh.status = 'playing'; fresh.round = 1; fresh.turnIndex = 0; fresh.updatedAt = Date.now();
     await storeSet('room:'+roomCode, fresh);
     room = fresh;
+    lastRenderedTurnKey = null;
     ensureAudio(); sfxWhistle();
     renderRoomScreen();
   }
@@ -616,12 +617,20 @@ button{font-family:'Inter',sans-serif;}
     return html;
   }
 
+  let lastRenderedTurnKey = null;
+
   function renderPlaying(){
     const active = room.players[room.turnIndex];
     if(!active){ roomContent.innerHTML = '<div class="wait-msg">Sincronizando...</div>'; return; }
     if(active.id === myId){
+      const turnKey = room.round + '-' + room.turnIndex + '-' + active.id;
+      if(lastRenderedTurnKey === turnKey){
+        return; // already showing this turn's UI — don't wipe aim/power state on every poll
+      }
+      lastRenderedTurnKey = turnKey;
       renderActiveTurn();
     } else {
+      lastRenderedTurnKey = null; // reset so my next turn renders fresh
       const t = teamById(active.teamId);
       let html = '<div class="turn-banner"><div class="who">Vez de '+active.name+'</div><div class="round">Rodada '+room.round+' de 5</div></div>';
       html += scoreboardHTML();
@@ -893,6 +902,7 @@ button{font-family:'Inter',sans-serif;}
     fresh.status = 'lobby'; fresh.round = 1; fresh.turnIndex = 0; fresh.updatedAt = Date.now();
     await storeSet('room:'+roomCode, fresh);
     room = fresh;
+    lastRenderedTurnKey = null;
     renderRoomScreen();
   }
 
