@@ -3,17 +3,15 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Sala Interativa - Reunião & Disputa</title>
-<!-- PeerJS para gerenciar as conexões WebRTC -->
+<title>Sistema de Mentoria & Reuniões Interativas</title>
 <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap');
 
 :root {
-  --sky-top: #0a1626; --sky-bottom: #2c4f74;
+  --panel: #12131a; --panel-2: #191b24; --panel-3: #20222e;
   --gold: #e8b84b; --gold-bright: #ffd876;
   --success: #2fa98c; --danger: #d1352b;
-  --panel: #12131a; --panel-2: #191b24; --panel-3: #20222e;
   --cream: #f4ede1; --cream-dim: #9a958d;
   --border: rgba(232,184,75,0.22);
 }
@@ -23,11 +21,11 @@ body {
   margin: 0; padding: 15px;
   background: radial-gradient(ellipse 90% 60% at 50% -10%, #1c2b3f 0%, #0a0b10 55%);
   min-height: 100vh; font-family: 'Inter', sans-serif; color: var(--cream);
-  display: flex; justify-content: center; align-items: flex-start;
+  display: flex; justify-content: center;
 }
 
-.app { width: 100%; max-width: 850px; }
-h1, h2 { font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.05em; text-align: center; margin: 0 0 10px; }
+.app { width: 100%; max-width: 950px; }
+h1, h2, h3 { font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.05em; margin: 0 0 10px; }
 
 .screen { display: none; }
 .screen.active { display: block; }
@@ -38,42 +36,42 @@ h1, h2 { font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.05em; text-ali
 .code-input { text-align: center; font-family: 'IBM Plex Mono', monospace; font-size: 24px; letter-spacing: 0.2em; text-transform: uppercase; }
 
 .big-btn {
-  width: 100%; height: 50px; border: none; border-radius: 10px;
-  font-family: 'Bebas Neue', sans-serif; font-size: 20px; cursor: pointer; margin-top: 10px; transition: 0.15s;
+  height: 48px; border: none; border-radius: 10px; padding: 0 16px;
+  font-family: 'Bebas Neue', sans-serif; font-size: 18px; cursor: pointer; transition: 0.15s;
 }
 .big-btn.primary { background: linear-gradient(180deg, var(--success) 0%, #1f7d68 100%); color: #fff; }
 .big-btn.accent { background: linear-gradient(180deg, var(--gold) 0%, #a9781f 100%); color: #1a1200; }
 .big-btn.meeting { background: linear-gradient(180deg, #3f7fd1 0%, #1c4b82 100%); color: #fff; }
+.big-btn.danger { background: linear-gradient(180deg, var(--danger) 0%, #8a1f18 100%); color: #fff; }
 
-/* LAYOUT VERTICAL: VÍDEOS / JOGO ACIMA, CHAT ABAIXO */
-.main-container { display: flex; flex-direction: column; gap: 15px; width: 100%; }
-
-/* GRID DE VÍDEOS EM ATÉ 2 COLUNAS */
-.video-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; width: 100%; }
+/* REUNIÃO E GRID DE VÍDEO */
+.video-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
 .video-card { position: relative; background: #000; border-radius: 10px; border: 1.5px solid var(--border); aspect-ratio: 4/3; overflow: hidden; }
 .video-card video { width: 100%; height: 100%; object-fit: cover; }
-.video-card .tag { position: absolute; bottom: 6px; left: 6px; background: rgba(0,0,0,0.75); padding: 3px 8px; border-radius: 4px; font-size: 12px; color: var(--gold-bright); }
+.video-card .tag { position: absolute; bottom: 6px; left: 6px; background: rgba(0,0,0,0.75); padding: 3px 8px; border-radius: 4px; font-size: 11px; color: var(--gold-bright); }
+.video-card .controls { position: absolute; top: 6px; right: 6px; display: flex; gap: 4px; }
+.mini-btn { background: rgba(0,0,0,0.8); border: 1px solid var(--border); color: #fff; font-size: 10px; padding: 4px 6px; border-radius: 4px; cursor: pointer; }
 
-/* CHAT FIXO NA PARTE DE BAIXO DE LARGURA TOTAL */
-.chat-container { background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px; display: flex; flex-direction: column; height: 260px; width: 100%; }
+/* LOUSA INTERATIVA (WHITEBOARD) */
+.whiteboard-container { background: #fff; border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 10px; }
+.whiteboard-toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; color: #000; }
+.color-picker { width: 25px; height: 25px; border-radius: 50%; cursor: pointer; border: 2px solid #ccc; }
+.color-picker.selected { border-color: #000; scale: 1.1; }
+canvas { background: #ffffff; border: 1px solid #ccc; border-radius: 6px; cursor: crosshair; width: 100%; height: 350px; }
+
+/* CHAT FIXO ABAIXO */
+.chat-container { background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px; display: flex; flex-direction: column; height: 240px; }
 .chat-header { padding: 10px 14px; border-bottom: 1px solid var(--border); font-weight: 700; font-size: 12px; color: var(--gold); }
 .chat-messages { flex: 1; padding: 10px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
-.chat-msg { background: #0e0f14; padding: 8px 12px; border-radius: 6px; font-size: 13px; border-left: 3px solid var(--gold); word-break: break-word; }
-.chat-msg .author { font-weight: bold; font-size: 11px; color: var(--gold-bright); margin-bottom: 2px; }
+.chat-msg { background: #0e0f14; padding: 8px 12px; border-radius: 6px; font-size: 13px; border-left: 3px solid var(--gold); }
 .chat-input-box { display: flex; gap: 8px; padding: 10px; border-top: 1px solid var(--border); }
-.chat-input-box input { flex: 1; background: #000; border: 1px solid var(--border); color: #fff; padding: 10px; border-radius: 6px; font-size: 14px; }
-.chat-input-box button { background: var(--gold); border: none; padding: 0 20px; border-radius: 6px; font-weight: bold; cursor: pointer; color: #000; }
-
-/* JOGO */
-.scoreboard { display: flex; justify-content: space-around; background: var(--panel-3); padding: 12px; border-radius: 10px; border: 1px solid var(--border); }
-.score-box { text-align: center; }
-.score-box .val { font-size: 28px; font-weight: bold; color: var(--gold-bright); }
+.chat-input-box input { flex: 1; background: #000; border: 1px solid var(--border); color: #fff; padding: 10px; border-radius: 6px; }
 </style>
 </head>
 <body>
 
 <div class="app">
-  <h1>SALA <span style="color:var(--gold-bright)">INTERATIVA</span></h1>
+  <h1>SALA <span style="color:var(--gold-bright)">INTERATIVA DE MENTORIA</span></h1>
 
   <!-- TELA INICIAL -->
   <section class="screen active" id="screen-home">
@@ -83,11 +81,13 @@ h1, h2 { font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.05em; text-ali
       
       <div style="margin-top: 15px;">
         <label style="font-size: 12px; color: var(--cream-dim);">CÓDIGO DA SALA (4 DIGITOS)</label>
-        <input class="text-input code-input" id="roomCodeInput" maxlength="4" placeholder="7707">
+        <input class="text-input code-input" id="roomCodeInput" maxlength="4" placeholder="5747">
       </div>
       
-      <button class="big-btn primary" id="btnJoin">Entrar na Sala</button>
-      <button class="big-btn accent" id="btnCreate">Criar Nova Sala</button>
+      <div style="display:flex; gap:10px; margin-top:10px;">
+        <button class="big-btn primary" id="btnJoin" style="flex:1;">Entrar na Sala</button>
+        <button class="big-btn accent" id="btnCreate" style="flex:1;">Criar Nova Sala (Anfitrião)</button>
+      </div>
     </div>
   </section>
 
@@ -99,41 +99,53 @@ h1, h2 { font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.05em; text-ali
         <h2 id="lblRoomCode" style="font-size:36px; color:var(--gold-bright); margin:0;">----</h2>
       </div>
 
-      <div style="margin-top:15px; display:flex; gap:10px;">
-        <button class="big-btn meeting" id="btnModeMeeting">📹 Entrar Reunião (Vídeo)</button>
-        <button class="big-btn primary" id="btnModeGame">⚽ Modo Disputa (Jogo)</button>
+      <!-- PAINEL DE AÇÕES DA AULA -->
+      <div style="margin-top:15px; display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="big-btn meeting" id="btnModeMeeting">📹 Reunião (Vídeos)</button>
+        <button class="big-btn accent" id="btnShareScreen">🖥️ Compartilhar Tela</button>
+        <button class="big-btn primary" id="btnToggleBoard">🎨 Lousa Interativa</button>
       </div>
     </div>
 
-    <!-- AREA PRINCIPAL VERTICAL -->
-    <div class="main-container">
-      
-      <!-- MÓDULO REUNIÃO -->
-      <div id="meetingArea" style="display:none;" class="card">
-        <h3 style="margin:0 0 10px; font-size:14px; color:var(--cream-dim);">PARTICIPANTES NA REUNIÃO</h3>
-        <div class="video-grid" id="videoGrid"></div>
-      </div>
+    <!-- AREA DE VÍDEOS -->
+    <div id="meetingArea" class="card">
+      <h3>Participantes na Reunião</h3>
+      <div class="video-grid" id="videoGrid"></div>
+    </div>
 
-      <!-- MÓDULO DO JOGO -->
-      <div id="gameArea" style="display:none;" class="card">
-        <h3>Placar da Disputa</h3>
-        <div class="scoreboard">
-          <div class="score-box"><div>TIME A</div><div class="val" id="scoreA">0</div></div>
-          <div class="score-box"><div>TIME B</div><div class="val" id="scoreB">0</div></div>
+    <!-- LOUSA INTERATIVA (QUADRO BRANCO) -->
+    <div id="boardArea" class="card" style="display:none;">
+      <h3>Lousa Interativa para Explicar Conteúdos</h3>
+      <div class="whiteboard-container">
+        <div class="whiteboard-toolbar">
+          <span><strong>Cores:</strong></span>
+          <div class="color-picker selected" style="background:#000000" onclick="setColor('#000000', this)"></div>
+          <div class="color-picker" style="background:#d1352b" onclick="setColor('#d1352b', this)"></div>
+          <div class="color-picker" style="background:#3f7fd1" onclick="setColor('#3f7fd1', this)"></div>
+          <div class="color-picker" style="background:#2fa98c" onclick="setColor('#2fa98c', this)"></div>
+
+          <span style="margin-left:15px;"><strong>Ferramenta:</strong></span>
+          <select id="toolSelect" style="padding:4px; border-radius:4px;">
+            <option value="pen">Lápis (Livre)</option>
+            <option value="line">Linha</option>
+            <option value="arrow">Seta</option>
+            <option value="rect">Retângulo / Quadrado</option>
+          </select>
+
+          <button onclick="clearBoard()" style="margin-left:auto; background:var(--danger); color:#fff; border:none; padding:6px 12px; border-radius:4px; cursor:pointer;">Limpar Lousa</button>
         </div>
-        <button class="big-btn accent" id="btnActionGame" style="margin-top:15px;">Pontuar</button>
+        <canvas id="paintCanvas" width="800" height="350"></canvas>
       </div>
+    </div>
 
-      <!-- CHAT ÚNICO ABAIXO -->
-      <div class="chat-container">
-        <div class="chat-header">💬 CHAT DA SALA (COMPARTILHADO COM TODOS)</div>
-        <div class="chat-messages" id="chatBox"></div>
-        <div class="chat-input-box">
-          <input type="text" id="msgInput" placeholder="Escreva uma mensagem..." maxlength="150">
-          <button id="btnSend">Enviar</button>
-        </div>
+    <!-- CHAT DA SALA -->
+    <div class="chat-container">
+      <div class="chat-header">💬 CHAT DA AULA / MENTORIA</div>
+      <div class="chat-messages" id="chatBox"></div>
+      <div class="chat-input-box">
+        <input type="text" id="msgInput" placeholder="Escreva uma pergunta ou mensagem..." maxlength="150">
+        <button class="big-btn accent" id="btnSend">Enviar</button>
       </div>
-
     </div>
   </section>
 </div>
@@ -142,46 +154,40 @@ h1, h2 { font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.05em; text-ali
 (function(){
   let peer = null;
   let localStream = null;
+  let screenStream = null;
   let myName = '';
   let roomCode = '';
-  let myPeerId = '';
-  const activeConns = [];
+  let isHost = false;
 
-  const userNameInput = document.getElementById('userNameInput');
-  const roomCodeInput = document.getElementById('roomCodeInput');
   const videoGrid = document.getElementById('videoGrid');
   const chatBox = document.getElementById('chatBox');
   const msgInput = document.getElementById('msgInput');
 
   document.getElementById('btnCreate').addEventListener('click', () => {
-    const code = Math.floor(1000 + Math.random() * 9000).toString();
-    startRoom(code);
+    isHost = true;
+    startRoom(Math.floor(1000 + Math.random() * 9000).toString());
   });
 
   document.getElementById('btnJoin').addEventListener('click', () => {
-    const code = roomCodeInput.value.trim();
+    const code = document.getElementById('roomCodeInput').value.trim();
     if(code.length !== 4) return alert('Digite um código de 4 dígitos!');
     startRoom(code);
   });
 
   function startRoom(code) {
-    myName = userNameInput.value.trim() || 'Participante';
+    myName = document.getElementById('userNameInput').value.trim() || 'Participante';
     roomCode = code;
     
-    // Gera ID único baseado no código da sala + nome do usuário sanitizado
-    const cleanName = myName.toLowerCase().replace(/[^a-z0-9]/g, '');
-    myPeerId = 'room' + roomCode + '-' + cleanName;
+    peer = new Peer('room' + roomCode + '-' + myName.toLowerCase().replace(/[^a-z0-9]/g, ''));
 
-    peer = new Peer(myPeerId);
-
-    peer.on('open', (id) => {
+    peer.on('open', () => {
       document.getElementById('lblRoomCode').textContent = roomCode;
       document.getElementById('screen-home').classList.remove('active');
       document.getElementById('screen-room').classList.add('active');
-      addChatMessage('Sistema', `Conectado como ${myName}. Código da Sala: ${roomCode}`);
+      addChatMessage('Sistema', `Bem-vindo à sala ${roomCode}, ${myName}! ${isHost ? '(Você é o Anfitrião)' : ''}`);
+      initCamera();
     });
 
-    // Receber chamadas de vídeo
     peer.on('call', (call) => {
       call.answer(localStream);
       call.on('stream', (remoteStream) => {
@@ -189,69 +195,32 @@ h1, h2 { font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.05em; text-ali
         addVideoFeed(call.peer, callerName, remoteStream);
       });
     });
-
-    // Receber mensagens de chat
-    peer.on('connection', (conn) => {
-      setupChatConnection(conn);
-    });
   }
 
-  function setupChatConnection(conn) {
-    if(!activeConns.includes(conn)) {
-      activeConns.push(conn);
+  async function initCamera() {
+    try {
+      localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      addVideoFeed('my-self', myName + ' (Você)', localStream, true);
+    } catch(e) {
+      alert('Erro ao acessar mídia.');
     }
-    conn.on('data', (data) => {
-      if(data.type === 'chat') {
-        addChatMessage(data.sender, data.text);
-      }
-    });
   }
 
-  // ATIVAR MODO REUNIÃO
-  document.getElementById('btnModeMeeting').addEventListener('click', async () => {
-    document.getElementById('gameArea').style.display = 'none';
-    document.getElementById('meetingArea').style.display = 'block';
-
-    if(!localStream) {
-      try {
-        localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        addVideoFeed(myPeerId, myName + ' (Você)', localStream, true);
-        connectToOtherPeers();
-      } catch(e) {
-        alert('Erro ao acessar câmera e microfone.');
-      }
+  // COMPARTILHAR TELA
+  document.getElementById('btnShareScreen').addEventListener('click', async () => {
+    try {
+      screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+      addVideoFeed('screen-share', myName + ' (Tela Compartilhada)', screenStream, true);
+    } catch(e) {
+      alert('Não foi possível compartilhar a tela.');
     }
   });
 
-  document.getElementById('btnModeGame').addEventListener('click', () => {
-    document.getElementById('meetingArea').style.display = 'none';
-    document.getElementById('gameArea').style.display = 'block';
+  // ALTERNAR LOUSA
+  document.getElementById('btnToggleBoard').addEventListener('click', () => {
+    const area = document.getElementById('boardArea');
+    area.style.display = area.style.display === 'none' ? 'block' : 'none';
   });
-
-  // Tenta estabelecer conexão de mídia e mensagens com o outro participante
-  function connectToOtherPeers() {
-    // Procura ativamente participantes padrão da sala
-    const targetNames = ['joel', 'mirela', 'user1', 'user2', 'anfitriao'];
-    targetNames.forEach(target => {
-      const targetPeerId = 'room' + roomCode + '-' + target;
-      if(targetPeerId !== myPeerId) {
-        // Tenta conexão de áudio e vídeo
-        const call = peer.call(targetPeerId, localStream);
-        if(call) {
-          call.on('stream', (remoteStream) => {
-            addVideoFeed(targetPeerId, target, remoteStream);
-          });
-        }
-        // Tenta conexão de chat
-        const conn = peer.connect(targetPeerId);
-        if(conn) {
-          conn.on('open', () => {
-            setupChatConnection(conn);
-          });
-        }
-      }
-    });
-  }
 
   function addVideoFeed(id, label, stream, isMuted = false) {
     if(document.getElementById('vcard-' + id)) return;
@@ -261,54 +230,117 @@ h1, h2 { font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.05em; text-ali
     card.id = 'vcard-' + id;
 
     const video = document.createElement('video');
-    video.autoplay = true;
-    video.playsInline = true;
-    video.muted = isMuted;
+    video.autoplay = true; video.playsInline = true; video.muted = isMuted;
     video.srcObject = stream;
 
     const tag = document.createElement('div');
-    tag.className = 'tag';
-    tag.textContent = label;
+    tag.className = 'tag'; tag.textContent = label;
 
-    card.appendChild(video);
-    card.appendChild(tag);
+    // CONTROLES EXCLUSIVOS DO ANFITRIÃO
+    if(isHost && id !== 'my-self') {
+      const controls = document.createElement('div');
+      controls.className = 'controls';
+      controls.innerHTML = `
+        <button class="mini-btn" onclick="toggleRemoteAudio('${id}')">Mutar Áudio</button>
+        <button class="mini-btn" onclick="toggleRemoteVideo('${id}')">Desativar Vídeo</button>
+      `;
+      card.appendChild(controls);
+    }
+
+    card.appendChild(video); card.appendChild(tag);
     videoGrid.appendChild(card);
   }
 
-  // ENVIAR CHAT PARA TODOS OS CONECTADOS
-  function sendMsg() {
-    const text = msgInput.value.trim();
-    if(!text) return;
-
-    addChatMessage(myName + ' (Você)', text);
-    msgInput.value = '';
-
-    activeConns.forEach(conn => {
-      if(conn.open) {
-        conn.send({ type: 'chat', sender: myName, text: text });
-      }
-    });
-  }
-
+  // CHAT
   function addChatMessage(author, text) {
     const el = document.createElement('div');
     el.className = 'chat-msg';
-    el.innerHTML = `<div class="author">${author}</div><div>${text}</div>`;
+    el.innerHTML = `<strong>${author}:</strong> <span>${text}</span>`;
     chatBox.appendChild(el);
     chatBox.scrollTop = chatBox.scrollHeight;
   }
 
-  document.getElementById('btnSend').addEventListener('click', sendMsg);
-  msgInput.addEventListener('keydown', (e) => { if(e.key === 'Enter') sendMsg(); });
-
-  // PONTUAÇÃO DO JOGO
-  let sA = 0, sB = 0;
-  document.getElementById('btnActionGame').addEventListener('click', () => {
-    if(Math.random() > 0.5) { sA++; document.getElementById('scoreA').textContent = sA; }
-    else { sB++; document.getElementById('scoreB').textContent = sB; }
+  document.getElementById('btnSend').addEventListener('click', () => {
+    const text = msgInput.value.trim();
+    if(!text) return;
+    addChatMessage(myName + ' (Você)', text);
+    msgInput.value = '';
   });
 
 })();
+
+// LÓGICA DA LOUSA INTERATIVA
+const canvas = document.getElementById('paintCanvas');
+const ctx = canvas.getContext('2d');
+let painting = false;
+let startX, startY;
+let currentColor = '#000000';
+
+function setColor(color, el) {
+  currentColor = color;
+  document.querySelectorAll('.color-picker').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+}
+
+function clearBoard() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+}
+
+canvas.addEventListener('mousedown', (e) => {
+  painting = true;
+  const rect = canvas.getBoundingClientRect();
+  startX = e.clientX - rect.left;
+  startY = e.clientY - rect.top;
+  ctx.beginPath();
+  ctx.moveTo(startX, startY);
+});
+
+canvas.addEventListener('mouseup', (e) => {
+  if(!painting) return;
+  painting = false;
+  const rect = canvas.getBoundingClientRect();
+  const endX = e.clientX - rect.left;
+  const endY = e.clientY - rect.top;
+  const tool = document.getElementById('toolSelect').value;
+
+  ctx.strokeStyle = currentColor;
+  ctx.lineWidth = 3;
+
+  if(tool === 'line') {
+    ctx.lineTo(endX, endY);
+    ctx.stroke();
+  } else if(tool === 'rect') {
+    ctx.strokeRect(startX, startY, endX - startX, endY - startY);
+  } else if(tool === 'arrow') {
+    drawArrow(startX, startY, endX, endY);
+  }
+});
+
+canvas.addEventListener('mousemove', (e) => {
+  if(!painting) return;
+  const tool = document.getElementById('toolSelect').value;
+  if(tool === 'pen') {
+    const rect = canvas.getBoundingClientRect();
+    ctx.strokeStyle = currentColor;
+    ctx.lineWidth = 3;
+    ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
+    ctx.stroke();
+  }
+});
+
+function drawArrow(fromx, fromy, tox, toy) {
+  const headlen = 10;
+  const dx = tox - fromx;
+  const dy = toy - fromy;
+  const angle = Math.atan2(dy, dx);
+  ctx.beginPath();
+  ctx.moveTo(fromx, fromy);
+  ctx.lineTo(tox, toy);
+  ctx.lineTo(tox - headlen * Math.cos(angle - Math.PI / 6), toy - headlen * Math.sin(angle - Math.PI / 6));
+  ctx.moveTo(tox, toy);
+  ctx.lineTo(tox - headlen * Math.cos(angle + Math.PI / 6), toy - headlen * Math.sin(angle + Math.PI / 6));
+  ctx.stroke();
+}
 </script>
 </body>
 </html>
