@@ -146,7 +146,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
   <section class="screen active" id="screen-home">
     <div class="card">
       <label style="font-size: 13px; color: var(--cream-dim);">SEU NOME</label>
-      <input class="text-input" id="userNameInput" placeholder="Escreva seu nome aqui" maxlength="20">
+      <input class="text-input" id="userNameInput" placeholder="Ex: Joel / Sophia..." maxlength="20">
 
       <div style="margin-top: 12px;">
         <label style="font-size: 13px; color: var(--cream-dim);">CÓDIGO DA SALA (4 DIGITOS)</label>
@@ -165,7 +165,6 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       <div class="top-bar">
         <div class="room-code-pill"><span style="font-size:11px;color:var(--cream-dim);">SALA</span><span class="code" id="lblRoomCode">----</span></div>
         <div class="participant-count" id="participantCountBtn">👥 <b id="participantCountNum">1</b> conectado(s)</div>
-        <button class="tool-btn" id="btnShareRoom" type="button">↗ Compartilhar</button>
         <button class="leave-btn" id="btnLeave">Sair</button>
       </div>
 
@@ -266,8 +265,6 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
   let camEnabled = true;
   let isScreenSharing = false;
   let mediaStarted = false;
-  let isCleaningUp = false;
-  let currentLocale = 'pt';
 
   const participants = {};   // peerId -> { name, isHost, muted }
   const activeConns = {};    // peerId -> DataConnection
@@ -282,36 +279,6 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   let recognition = null;
   let isTranslating = false;
-
-  function applyAutomaticLanguage(){
-    const params = new URLSearchParams(location.search);
-    const forced = params.get('lang');
-    const english = forced === 'en' || (!forced && navigator.language.toLowerCase().startsWith('en'));
-    currentLocale = english ? 'en' : 'pt';
-    document.documentElement.lang = english ? 'en' : 'pt-BR';
-    if(english){
-      document.title = 'Interactive Room';
-      document.querySelector('h1').innerHTML = 'INTERACTIVE <span style="color:var(--gold-bright)">ROOM</span>';
-      document.querySelectorAll('.card label')[0].textContent = 'YOUR NAME';
-      document.querySelectorAll('.card label')[1].textContent = 'ROOM CODE (4 DIGITS)';
-      document.querySelector('#userNameInput').placeholder = 'Write your name here';
-      document.querySelector('#btnJoin').textContent = 'Join Room';
-      document.querySelector('#btnCreate').textContent = 'Create Room';
-      document.querySelector('#btnStartMedia').textContent = '📸 Turn on camera and audio';
-      document.querySelector('#btnShareRoom').textContent = '↗ Share';
-      document.querySelector('#btnLeave').textContent = 'Leave';
-      document.querySelector('#btnWhiteboard').textContent = '✏️ Whiteboard';
-      document.querySelector('.translation-bar strong').textContent = '🌐 Live Translation:';
-      document.querySelector('.translation-bar label:nth-of-type(1)').textContent = 'I speak:';
-      document.querySelector('.translation-bar label:nth-of-type(2)').textContent = 'Translate to:';
-      document.querySelector('#btnStartTranslate').textContent = 'Activate captions';
-      document.querySelector('.card h3').textContent = 'PARTICIPANTS IN ROOM';
-    }
-    const roomFromLink = params.get('room');
-    if(roomFromLink && /^\\d{4}$/.test(roomFromLink)) roomCodeInput.value = roomFromLink;
-  }
-
-  applyAutomaticLanguage();
 
   const peerConfig = {
     config: {
@@ -345,9 +312,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
   });
 
   function startRoom(code) {
-    isCleaningUp = false;
-    mediaStarted = false;
-    myName = userNameInput.value.trim() || (currentLocale === 'en' ? 'User' : 'Usuário');
+    myName = userNameInput.value.trim() || 'Usuário';
     roomCode = code;
     hostPeerId = 'sala-' + roomCode;
     myPeerId = isHost ? hostPeerId : hostPeerId + '-' + Math.random().toString(36).substr(2, 6);
@@ -377,7 +342,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       }
     });
 
-    peer.on('disconnected', () => { if(!isCleaningUp){ try{ peer.reconnect(); }catch(e){} } });
+    peer.on('disconnected', () => { try{ peer.reconnect(); }catch(e){} });
 
     peer.on('connection', (conn) => { setupConnection(conn); });
 
@@ -487,11 +452,6 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
         handlePeerLeft(data.peerId, true);
         break;
 
-      case 'room-closed':
-        showToast(currentLocale === 'en' ? 'The host closed this room.' : 'O anfitrião encerrou esta sala.');
-        cleanupAndReturnHome(true);
-        break;
-
       case 'chat':
         addChatBubble(data.name, data.text, false);
         break;
@@ -550,38 +510,15 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
   }
 
   /* ================= Media ================= */
-  async function requestLocalMedia(){
-    if(mediaStarted) return;
-    if(!window.isSecureContext || !navigator.mediaDevices?.getUserMedia){
-      showToast(currentLocale === 'en' ? 'Camera and microphone require HTTPS. Open the secure link.' : 'A câmera e o microfone precisam de HTTPS. Abra o link seguro.');
-      return;
-    }
-    const mediaRequests = [
-      { video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } }, audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } },
-      { video: true, audio: true }
-    ];
-    let lastError = null;
-    for(const constraints of mediaRequests){
-      try{
-        localStream = await navigator.mediaDevices.getUserMedia(constraints);
-        if(localStream.getVideoTracks().length && localStream.getAudioTracks().length) break;
-        localStream.getTracks().forEach(track => track.stop());
-        localStream = null;
-      }catch(error){
-        lastError = error;
-        if(error?.name === 'NotAllowedError' || error?.name === 'SecurityError') break;
-      }
-    }
+  document.getElementById('btnStartMedia').addEventListener('click', async () => {
     try {
-      if(!localStream) throw lastError || new Error('media-unavailable');
+      localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       mediaStarted = true;
       addVideoFeed(myPeerId, myName + ' (Você)', localStream, true);
       document.getElementById('btnStartMedia').style.display = 'none';
       document.getElementById('btnToggleMic').style.display = '';
       document.getElementById('btnToggleCam').style.display = '';
       document.getElementById('btnScreenShare').style.display = '';
-
-      startTranslationAutomatically();
 
       // Recover connections that were answered before we had media (they'd
       // never receive our video/audio otherwise), and call anyone we have a
@@ -595,21 +532,9 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
         if(!activeCalls[id]) callPeer(id);
       });
     } catch(e) {
-      const errorName = e?.name || 'UnknownError';
-      const messages = {
-        NotAllowedError: currentLocale === 'en' ? 'Chrome blocked camera/microphone. Click the camera icon near the address bar and choose Allow, then reload.' : 'O Chrome bloqueou câmera/microfone. Clique no ícone de câmera ao lado do endereço, escolha Permitir e recarregue a página.',
-        NotFoundError: currentLocale === 'en' ? 'No camera or microphone was found on this device.' : 'Nenhuma câmera ou microfone foi encontrado neste dispositivo.',
-        NotReadableError: currentLocale === 'en' ? 'Camera or microphone is being used by another application.' : 'A câmera ou o microfone está sendo usado por outro aplicativo.',
-        OverconstrainedError: currentLocale === 'en' ? 'The requested camera settings are not available.' : 'As configurações solicitadas da câmera não estão disponíveis.',
-        SecurityError: currentLocale === 'en' ? 'The browser blocked media access for security reasons. Use the HTTPS address.' : 'O navegador bloqueou o acesso por segurança. Use o endereço HTTPS.',
-        UnknownError: currentLocale === 'en' ? 'Could not activate camera and microphone. Check the site permissions and try again.' : 'Não foi possível ativar câmera e microfone. Verifique as permissões do site e tente novamente.'
-      };
-      console.error('getUserMedia failed:', errorName, e);
-      showToast(messages[errorName] || messages.UnknownError);
+      showToast('Autorize a câmera e o microfone nas configurações do seu navegador.');
     }
-  }
-
-  document.getElementById('btnStartMedia').addEventListener('click', requestLocalMedia);
+  });
 
   document.getElementById('btnToggleMic').addEventListener('click', () => {
     if(!localStream) return;
@@ -689,9 +614,8 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     card.id = 'vcard-' + id;
 
     const video = document.createElement('video');
-    video.autoplay = true; video.playsInline = true; video.setAttribute('playsinline',''); video.muted = !!isMuted;
+    video.autoplay = true; video.playsInline = true; video.muted = !!isMuted;
     video.srcObject = stream;
-    video.onloadedmetadata = () => video.play().catch(() => {});
 
     const tag = document.createElement('div');
     tag.className = 'tag'; tag.id = 'tag-' + id;
@@ -773,17 +697,13 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     }, 2200);
   }
 
-  function cleanupAndReturnHome(roomClosed = false){
-    isCleaningUp = true;
-    if(recognition){ try{ recognition.onend = null; recognition.stop(); }catch(e){} recognition = null; }
-    isTranslating = false;
+  function cleanupAndReturnHome(){
     Object.values(activeCalls).forEach(c=>{ try{c.close();}catch(e){} });
     Object.values(activeConns).forEach(c=>{ try{c.close();}catch(e){} });
     if(localStream){ localStream.getTracks().forEach(t=>t.stop()); localStream = null; }
     if(screenStream){ screenStream.getTracks().forEach(t=>t.stop()); screenStream = null; }
     if(peer){ try{ peer.destroy(); }catch(e){} peer = null; }
     videoGrid.innerHTML = '';
-    mediaStarted = false;
     document.getElementById('screen-room').classList.remove('active');
     document.getElementById('screen-home').classList.add('active');
     document.getElementById('chatFab').classList.remove('show');
@@ -800,22 +720,8 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
   }
 
   document.getElementById('btnLeave').addEventListener('click', () => {
-    if(isHost){
-      broadcastAll({ type: 'room-closed' });
-      showToast(currentLocale === 'en' ? 'Room closed.' : 'Sala encerrada.');
-    } else {
-      broadcastAll({ type: 'peer-left', peerId: myPeerId });
-    }
-    cleanupAndReturnHome(isHost);
-  });
-
-  document.getElementById('btnShareRoom').addEventListener('click', async () => {
-    const shareUrl = `${location.origin}${location.pathname}?room=${encodeURIComponent(roomCode)}&lang=${currentLocale}`;
-    const text = currentLocale === 'en' ? `Join my translation room. Code: ${roomCode}` : `Entre na minha sala de tradução. Código: ${roomCode}`;
-    if(navigator.share){
-      try{ await navigator.share({ title: currentLocale === 'en' ? 'Interactive Room' : 'Sala Interativa', text, url: shareUrl }); return; }catch(e){}
-    }
-    window.open(`https://wa.me/?text=${encodeURIComponent(`${text} ${shareUrl}`)}`, '_blank', 'noopener,noreferrer');
+    broadcastAll({ type: 'peer-left', peerId: myPeerId });
+    cleanupAndReturnHome();
   });
 
   /* ================= Participants side panel ================= */
@@ -1037,49 +943,50 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     }
   }
 
-  /* ================= Speech recognition + translation ================= */
-  function startTranslationAutomatically(){
-    if(!SpeechRecognition){
-      showToast(currentLocale === 'en' ? 'Use Google Chrome on the phone for live captions.' : 'Utilize o navegador Google Chrome no celular.');
+  /* ================= Speech recognition + translation (kept working) ================= */
+  document.getElementById('btnStartTranslate').addEventListener('click', () => {
+    if(!SpeechRecognition) return showToast('Utilize o navegador Google Chrome no celular.');
+
+    if(isTranslating) {
+      if(recognition) recognition.stop();
+      isTranslating = false;
+      document.getElementById('btnStartTranslate').textContent = "Ativar Legendas";
+      document.getElementById('btnStartTranslate').style.background = "var(--success)";
       return;
     }
-    if(isTranslating) return;
+
     isTranslating = true;
-    document.getElementById('btnStartTranslate').textContent = currentLocale === 'en' ? 'Stop captions' : 'Parar Legendas';
-    document.getElementById('btnStartTranslate').style.background = 'var(--danger)';
+    document.getElementById('btnStartTranslate').textContent = "Parar Legendas";
+    document.getElementById('btnStartTranslate').style.background = "var(--danger)";
+
     recognition = new SpeechRecognition();
     recognition.continuous = true;
     recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
     recognition.lang = document.getElementById('myLang').value;
+
     recognition.onresult = async (event) => {
       const transcript = event.results[event.results.length - 1][0].transcript.trim();
       if(!transcript || transcript.length < 2) return;
+
       const targetLang = document.getElementById('targetLang').value;
       const sourceLang = recognition.lang.split('-')[0];
+
       try {
         const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(transcript)}&langpair=${sourceLang}|${targetLang}`);
         const data = await res.json();
-        const translatedText = data?.responseData?.translatedText;
-        if(!translatedText || translatedText.includes('NO QUERY SPECIFIED')) return;
-        showSubtitle(myPeerId, transcript, translatedText);
-        broadcastAll({ type: 'subtitle', peerId: myPeerId, original: transcript, translated: translatedText });
-      } catch(e) { console.warn('Translation unavailable', e); }
-    };
-    recognition.onend = () => {
-      if(isTranslating && !isCleaningUp){ setTimeout(() => { try{ recognition.start(); }catch(e){} }, 120); }
-    };
-    try{ recognition.start(); }catch(e){ isTranslating = false; }
-  }
 
-  document.getElementById('btnStartTranslate').addEventListener('click', () => {
-    if(isTranslating){
-      isTranslating = false;
-      if(recognition){ try{ recognition.onend = null; recognition.stop(); }catch(e){} }
-      recognition = null;
-      document.getElementById('btnStartTranslate').textContent = currentLocale === 'en' ? 'Activate captions' : 'Ativar Legendas';
-      document.getElementById('btnStartTranslate').style.background = 'var(--success)';
-    } else startTranslationAutomatically();
+        if(data && data.responseData && data.responseData.translatedText) {
+          const translatedText = data.responseData.translatedText;
+          if(translatedText.includes("NO QUERY SPECIFIED")) return;
+
+          showSubtitle(myPeerId, transcript, translatedText);
+          broadcastAll({ type: 'subtitle', peerId: myPeerId, original: transcript, translated: translatedText });
+        }
+      } catch(e) {}
+    };
+
+    recognition.onend = () => { if(isTranslating) recognition.start(); };
+    recognition.start();
   });
 
   let subtitleTimers = {};
