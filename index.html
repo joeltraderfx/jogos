@@ -70,9 +70,13 @@ h1 { font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.05em; text-align: 
 .video-card .host-tools button.mute-btn.active{ background: var(--danger); }
 .video-card .screen-tag{ position:absolute; bottom:10px; right:10px; background:rgba(63,127,209,0.9); padding:4px 9px; border-radius:6px; font-size:11px; z-index:2; }
 
-.subtitles { position: absolute; bottom: 12px; left: 4%; width: 92%; text-align: center; background: rgba(0,0,0,0.9); color: #fff; font-size: 15px; padding: 10px; border-radius: 8px; z-index: 3; display: none; border: 1px solid var(--gold); }
-.subtitles.active { display: block; }
-.sub-translated { color: var(--gold-bright); font-weight: 700; margin-top: 4px; font-size: 17px; line-height: 1.2; }
+.subtitles { display: none; } /* legacy, unused — kept so nothing references a missing class */
+
+.global-captions{ position:fixed; left:50%; bottom:16px; transform:translateX(-50%) translateY(20px); width:min(92vw, 640px); text-align:center; background:rgba(10,11,16,0.94); color:#fff; font-size:15px; padding:12px 16px; border-radius:12px; z-index:75; border:1px solid var(--gold); opacity:0; pointer-events:none; transition:opacity .2s, transform .2s; }
+.global-captions.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+.gc-name{ font-size:11px; color:var(--gold-bright); font-weight:700; text-transform:uppercase; letter-spacing:0.08em; margin-bottom:4px; }
+.gc-original{ color:#e6e2da; }
+.gc-translated{ color: var(--gold-bright); font-weight: 700; margin-top: 4px; font-size: 17px; line-height: 1.25; }
 
 .translation-bar { background: var(--panel-2); padding: 12px; border-radius: 10px; border: 1px solid #3f7fd1; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: center; font-size: 14px; margin-top:10px; }
 select { background: #000; color: #fff; border: 1px solid var(--border); padding: 8px; border-radius: 6px; font-size: 14px; }
@@ -109,9 +113,9 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
 .chat-input-row input{ flex:1; background:var(--panel); border:1px solid var(--border); color:var(--cream); border-radius:20px; padding:9px 14px; font-size:13px;}
 .chat-input-row button{ background:var(--gold); border:none; color:#1a1200; border-radius:20px; padding:0 16px; font-weight:700; font-size:13px; cursor:pointer;}
 
-/* ---------- whiteboard ---------- */
-.wb-overlay{ position:fixed; inset:0; background:#0a0b10; z-index:90; display:none; flex-direction:column; }
-.wb-overlay.show{ display:flex; }
+/* ---------- whiteboard (appears in place of the video grid, synced for everyone) ---------- */
+.wb-panel{ display:none; flex-direction:column; margin-top:10px; border-radius:10px; overflow:hidden; border:1.5px solid var(--border); }
+.wb-panel.show{ display:flex; }
 .wb-toolbar{ display:flex; gap:8px; align-items:center; padding:10px 12px; background:var(--panel-2); border-bottom:1px solid var(--border); flex-wrap:wrap; }
 .wb-toolbar button{ background:var(--panel); border:1px solid var(--border); color:var(--cream); border-radius:8px; width:38px; height:38px; font-size:16px; cursor:pointer; }
 .wb-toolbar button.active{ background:var(--gold); color:#1a1200; border-color:var(--gold); }
@@ -119,7 +123,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
 .wb-color{ width:26px; height:26px; border-radius:50%; border:2px solid rgba(255,255,255,0.15); cursor:pointer; }
 .wb-color.selected{ border-color:#fff; box-shadow:0 0 0 2px var(--gold); }
 .wb-spacer{ flex:1; }
-.wb-canvas-wrap{ flex:1; position:relative; background:#f4f1ea; touch-action:none; }
+.wb-canvas-wrap{ height:60vh; min-height:320px; position:relative; background:#f4f1ea; touch-action:none; }
 #wbCanvas{ position:absolute; inset:0; width:100%; height:100%; display:block; touch-action:none; }
 
 .kicked-overlay{ position:fixed; inset:0; background:rgba(10,11,16,0.96); z-index:100; display:none; align-items:center; justify-content:center; flex-direction:column; gap:14px; text-align:center; padding:20px; }
@@ -199,8 +203,35 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     <div class="card" style="margin-top:12px;">
       <h3 style="margin:0 0 8px; font-size:15px; text-align:left; color:var(--cream-dim);">PARTICIPANTES NA SALA</h3>
       <div class="video-grid" id="videoGrid"></div>
+
+      <div class="wb-panel" id="wbPanel">
+        <div class="wb-toolbar">
+          <button data-tool="text" title="Texto">🔤</button>
+          <button data-tool="hline" title="Linha horizontal">➖</button>
+          <button data-tool="vline" title="Linha vertical">┃</button>
+          <button data-tool="rect" title="Retângulo">▭</button>
+          <button data-tool="circle" title="Círculo">◯</button>
+          <button data-tool="arrow" title="Seta">➜</button>
+          <div class="wb-colors">
+            <button class="wb-color selected" data-color="#111111" style="background:#111111"></button>
+            <button class="wb-color" data-color="#2f6fed" style="background:#2f6fed"></button>
+            <button class="wb-color" data-color="#e23b3b" style="background:#e23b3b"></button>
+            <button class="wb-color" data-color="#2fa94f" style="background:#2fa94f"></button>
+          </div>
+          <div class="wb-spacer"></div>
+          <button id="wbClear" title="Limpar tudo">🗑️</button>
+          <button id="wbClose" title="Voltar para o vídeo">✕</button>
+        </div>
+        <div class="wb-canvas-wrap"><canvas id="wbCanvas"></canvas></div>
+      </div>
     </div>
   </section>
+</div>
+
+<div class="global-captions" id="globalCaptions">
+  <div class="gc-name" id="gcName"></div>
+  <div class="gc-original" id="gcOriginal"></div>
+  <div class="gc-translated" id="gcTranslated"></div>
 </div>
 
 <!-- participants side panel -->
@@ -218,28 +249,6 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     <input id="chatInput" maxlength="300" placeholder="Escreva uma mensagem...">
     <button id="chatSendBtn">Enviar</button>
   </div>
-</div>
-
-<!-- whiteboard -->
-<div class="wb-overlay" id="wbOverlay">
-  <div class="wb-toolbar">
-    <button data-tool="text" title="Texto">🔤</button>
-    <button data-tool="hline" title="Linha horizontal">➖</button>
-    <button data-tool="vline" title="Linha vertical">┃</button>
-    <button data-tool="rect" title="Retângulo">▭</button>
-    <button data-tool="circle" title="Círculo">◯</button>
-    <button data-tool="arrow" title="Seta">➜</button>
-    <div class="wb-colors">
-      <button class="wb-color selected" data-color="#111111" style="background:#111111"></button>
-      <button class="wb-color" data-color="#2f6fed" style="background:#2f6fed"></button>
-      <button class="wb-color" data-color="#e23b3b" style="background:#e23b3b"></button>
-      <button class="wb-color" data-color="#2fa94f" style="background:#2fa94f"></button>
-    </div>
-    <div class="wb-spacer"></div>
-    <button id="wbClear" title="Limpar tudo">🗑️</button>
-    <button id="wbClose" title="Fechar">✕</button>
-  </div>
-  <div class="wb-canvas-wrap"><canvas id="wbCanvas"></canvas></div>
 </div>
 
 <div class="kicked-overlay" id="kickedOverlay">
@@ -484,6 +493,14 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
         wbShapes = [];
         redrawWhiteboard();
         break;
+
+      case 'wb-open':
+        setWhiteboardOpen(true, false);
+        break;
+
+      case 'wb-close':
+        setWhiteboardOpen(false, false);
+        break;
     }
   }
 
@@ -621,10 +638,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     tag.className = 'tag'; tag.id = 'tag-' + id;
     tag.innerHTML = '<span class="tag-name">'+escapeHtml(label)+'</span><span class="mic-off" id="micoff-'+id+'" style="display:none;">🔇</span>';
 
-    const subs = document.createElement('div');
-    subs.className = 'subtitles'; subs.id = 'subs-' + id;
-
-    card.appendChild(video); card.appendChild(tag); card.appendChild(subs);
+    card.appendChild(video); card.appendChild(tag);
 
     if(isHost && id !== myPeerId){
       const hostTools = document.createElement('div');
@@ -704,6 +718,9 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     if(screenStream){ screenStream.getTracks().forEach(t=>t.stop()); screenStream = null; }
     if(peer){ try{ peer.destroy(); }catch(e){} peer = null; }
     videoGrid.innerHTML = '';
+    videoGrid.style.display = '';
+    document.getElementById('wbPanel').classList.remove('show');
+    wbOpenState = false;
     document.getElementById('screen-room').classList.remove('active');
     document.getElementById('screen-home').classList.add('active');
     document.getElementById('chatFab').classList.remove('show');
@@ -795,7 +812,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
   chatInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter') sendChatMessage(); });
 
   /* ================= Whiteboard ================= */
-  const wbOverlay = document.getElementById('wbOverlay');
+  const wbPanel = document.getElementById('wbPanel');
   const wbCanvas = document.getElementById('wbCanvas');
   const wbCtx = wbCanvas.getContext('2d');
   let wbTool = 'rect';
@@ -803,13 +820,25 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
   let wbDrawing = false;
   let wbStart = null;
   let wbPreview = null;
+  let wbOpenState = false;
 
+  function setWhiteboardOpen(open, shouldBroadcast){
+    wbOpenState = open;
+    videoGrid.style.display = open ? 'none' : '';
+    wbPanel.classList.toggle('show', open);
+    const btn = document.getElementById('btnWhiteboard');
+    btn.textContent = open ? '📹 Voltar para o vídeo' : '✏️ Lousa';
+    btn.classList.toggle('active', open);
+    if(open){ sizeWhiteboardCanvas(); redrawWhiteboard(); }
+    if(shouldBroadcast){ broadcastAll({ type: open ? 'wb-open' : 'wb-close' }); }
+  }
+
+  // The whiteboard is a shared teaching tool: whoever opens or closes it
+  // switches the view for the whole room, like screen sharing does.
   document.getElementById('btnWhiteboard').addEventListener('click', ()=>{
-    wbOverlay.classList.add('show');
-    sizeWhiteboardCanvas();
-    redrawWhiteboard();
+    setWhiteboardOpen(!wbOpenState, true);
   });
-  document.getElementById('wbClose').addEventListener('click', ()=> wbOverlay.classList.remove('show'));
+  document.getElementById('wbClose').addEventListener('click', ()=> setWhiteboardOpen(false, true));
   document.getElementById('wbClear').addEventListener('click', ()=>{
     wbShapes = [];
     redrawWhiteboard();
@@ -832,7 +861,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
   });
   document.querySelector('.wb-toolbar [data-tool="rect"]').classList.add('active');
 
-  window.addEventListener('resize', ()=>{ if(wbOverlay.classList.contains('show')){ sizeWhiteboardCanvas(); redrawWhiteboard(); } });
+  window.addEventListener('resize', ()=>{ if(wbOpenState){ sizeWhiteboardCanvas(); redrawWhiteboard(); } });
 
   function sizeWhiteboardCanvas(){
     const rect = wbCanvas.parentElement.getBoundingClientRect();
@@ -965,14 +994,24 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     recognition.lang = document.getElementById('myLang').value;
 
     recognition.onresult = async (event) => {
-      const transcript = event.results[event.results.length - 1][0].transcript.trim();
+      let transcript;
+      try{
+        transcript = event.results[event.results.length - 1][0].transcript.trim();
+      }catch(e){ return; }
       if(!transcript || transcript.length < 2) return;
 
       const targetLang = document.getElementById('targetLang').value;
       const sourceLang = recognition.lang.split('-')[0];
 
+      // Show the original line immediately so something is always visible,
+      // even if the translation call is slow or fails (common on flaky
+      // mobile connections).
+      showSubtitle(myPeerId, transcript, 'traduzindo...');
+      broadcastAll({ type: 'subtitle', peerId: myPeerId, original: transcript, translated: '(traduzindo...)' });
+
       try {
         const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(transcript)}&langpair=${sourceLang}|${targetLang}`);
+        if(!res.ok) throw new Error('HTTP ' + res.status);
         const data = await res.json();
 
         if(data && data.responseData && data.responseData.translatedText) {
@@ -981,24 +1020,36 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
 
           showSubtitle(myPeerId, transcript, translatedText);
           broadcastAll({ type: 'subtitle', peerId: myPeerId, original: transcript, translated: translatedText });
+        } else {
+          throw new Error('Resposta inesperada do tradutor');
         }
-      } catch(e) {}
+      } catch(e) {
+        showToast('Falha ao traduzir: ' + (e && e.message ? e.message : 'erro de rede') + '. Verifique a conexão do celular.');
+        showSubtitle(myPeerId, transcript, '(tradução indisponível)');
+      }
+    };
+
+    recognition.onerror = (e) => {
+      showToast('Erro no reconhecimento de voz: ' + (e.error || 'desconhecido'));
     };
 
     recognition.onend = () => { if(isTranslating) recognition.start(); };
     recognition.start();
   });
 
-  let subtitleTimers = {};
+  let globalCaptionTimer = null;
   function showSubtitle(peerId, original, translated) {
-    const subEl = document.getElementById('subs-' + peerId);
-    if(!subEl) return;
+    const name = peerId === myPeerId
+      ? (myName + ' (Você)')
+      : ((participants[peerId] && participants[peerId].name) || 'Alguém');
+    document.getElementById('gcName').textContent = name;
+    document.getElementById('gcOriginal').textContent = original;
+    document.getElementById('gcTranslated').textContent = translated;
+    const gc = document.getElementById('globalCaptions');
+    gc.classList.add('show');
 
-    subEl.innerHTML = `<div>${escapeHtml(original)}</div><div class="sub-translated">${escapeHtml(translated)}</div>`;
-    subEl.classList.add('active');
-
-    clearTimeout(subtitleTimers[peerId]);
-    subtitleTimers[peerId] = setTimeout(() => { subEl.classList.remove('active'); }, 6000);
+    clearTimeout(globalCaptionTimer);
+    globalCaptionTimer = setTimeout(() => { gc.classList.remove('show'); }, 6000);
   }
 
 })();
