@@ -48,7 +48,6 @@ h1 { font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.05em; text-align: 
 .video-card video { width: 100%; height: 100%; object-fit: cover; }
 .video-card .tag { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.85); padding: 6px 12px; border-radius: 6px; font-size: 14px; color: var(--gold-bright); font-weight: bold; z-index: 2; border: 1px solid var(--border); }
 
-/* FONTE AMPLIADA PARA LEITURA FÁCIL NO CELULAR */
 .subtitles { position: absolute; bottom: 12px; left: 4%; width: 92%; text-align: center; background: rgba(0,0,0,0.9); color: #fff; font-size: 16px; padding: 10px; border-radius: 8px; z-index: 3; display: none; border: 1px solid var(--gold); }
 .subtitles.active { display: block; }
 .sub-translated { color: var(--gold-bright); font-weight: 700; margin-top: 4px; font-size: 18px; line-height: 1.2; }
@@ -129,6 +128,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
   let myName = '';
   let roomCode = '';
   let myPeerId = '';
+  let isHost = false;
   const activeConns = {};
 
   const userNameInput = document.getElementById('userNameInput');
@@ -139,14 +139,26 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
   let recognition = null;
   let isTranslating = false;
 
+  // Configuração com servidores STUN públicos do Google para liberar conexão entre redes de celular
+  const peerConfig = {
+    config: {
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' }
+      ]
+    }
+  };
+
   document.getElementById('btnCreate').addEventListener('click', () => {
-    const code = Math.floor(1000 + Math.random() * 9000).toString();
+    const code = roomCodeInput.value.trim() || Math.floor(1000 + Math.random() * 9000).toString();
+    isHost = true;
     startRoom(code);
   });
 
   document.getElementById('btnJoin').addEventListener('click', () => {
     const code = roomCodeInput.value.trim();
     if(code.length !== 4) return alert('Digite o código de 4 dígitos!');
+    isHost = false;
     startRoom(code);
   });
 
@@ -154,9 +166,9 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     myName = userNameInput.value.trim() || 'Usuário';
     roomCode = code;
     
-    // Gera ID único para o PeerJS garantindo reconexão sem conflitos
-    myPeerId = 'sala-' + roomCode + '-' + Math.random().toString(36).substr(2, 6);
-    peer = new Peer(myPeerId);
+    // O Host assume o ID fixo da sala. O Cliente gera um ID único.
+    myPeerId = isHost ? 'sala-' + roomCode : 'sala-' + roomCode + '-' + Math.random().toString(36).substr(2, 5);
+    peer = new Peer(myPeerId, peerConfig);
 
     peer.on('open', () => {
       document.getElementById('lblRoomCode').textContent = roomCode;
@@ -164,17 +176,23 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       document.getElementById('screen-room').classList.add('active');
     });
 
-    // Receber chamadas de áudio/vídeo
+    peer.on('error', (err) => {
+      if(err.type === 'unavailable-id') {
+        alert('Essa sala já foi criada! Clique em "Entrar na Sala".');
+      }
+    });
+
+    // Receber conexões de dados (Legendas/Nomes)
+    peer.on('connection', (conn) => {
+      setupConnection(conn);
+    });
+
+    // Receber chamadas de mídia (Vídeo)
     peer.on('call', (call) => {
       call.answer(localStream);
       call.on('stream', (remoteStream) => {
         addVideoFeed(call.peer, call.metadata?.name || 'Conectado', remoteStream);
       });
-    });
-
-    // Receber dados de legenda e nome
-    peer.on('connection', (conn) => {
-      registerDataChannel(conn);
     });
   }
 
@@ -183,49 +201,41 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       addVideoFeed(myPeerId, myName + ' (Você)', localStream, true);
       document.getElementById('btnStartMedia').style.display = 'none';
-      
-      connectToRoomPeers();
+
+      // Se for participante (cliente), conecta imediatamente ao Host da sala
+      if(!isHost) {
+        const hostPeerId = 'sala-' + roomCode;
+        const conn = peer.connect(hostPeerId);
+        setupConnection(conn);
+
+        const call = peer.call(hostPeerId, localStream, { metadata: { name: myName } });
+        call.on('stream', (remoteStream) => {
+          addVideoFeed(hostPeerId, 'Anfitrião', remoteStream);
+        });
+      }
     } catch(e) {
-      alert('Por favor, autorize o acesso à câmera e microfone no celular.');
+      alert('Autorize a câmera e o microfone nas configurações do seu navegador.');
     }
   });
 
-  // Conecta aos participantes ativos
-  function connectToRoomPeers() {
-    // Tenta conectar com o prefixo comum da sala
-    peer.listAllPeers && peer.listAllPeers((peers) => {
-      peers.forEach(peerId => {
-        if(peerId.startsWith('sala-' + roomCode) && peerId !== myPeerId) {
-          connectToPeer(peerId);
-        }
-      });
-    });
-  }
-
-  function connectToPeer(targetPeerId) {
-    if(activeConns[targetPeerId]) return;
-
-    const conn = peer.connect(targetPeerId);
-    registerDataChannel(conn);
-
-    if(localStream) {
-      const call = peer.call(targetPeerId, localStream, { metadata: { name: myName } });
-      call.on('stream', (remoteStream) => {
-        addVideoFeed(targetPeerId, 'Carregando...', remoteStream);
-      });
-    }
-  }
-
-  function registerDataChannel(conn) {
+  function setupConnection(conn) {
     activeConns[conn.peer] = conn;
 
     conn.on('open', () => {
-      conn.send({ type: 'name', name: myName, peerId: myPeerId });
+      conn.send({ type: 'identity', name: myName, peerId: myPeerId });
+      
+      // Se eu sou o Host e outro participante entrou, ligo de volta para ele para enviar meu vídeo
+      if(isHost && localStream) {
+        const call = peer.call(conn.peer, localStream, { metadata: { name: myName } });
+        call.on('stream', (remoteStream) => {
+          addVideoFeed(conn.peer, 'Participante', remoteStream);
+        });
+      }
     });
 
     conn.on('data', (data) => {
-      if(data.type === 'name') {
-        updateVideoTag(conn.peer, data.name);
+      if(data.type === 'identity') {
+        updateVideoTag(data.peerId, data.name);
       }
       if(data.type === 'subtitle') {
         showSubtitle(data.peerId, data.original, data.translated);
@@ -259,9 +269,9 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     if(tag) tag.textContent = name;
   }
 
-  // TRADUÇÃO E LEGENDA SINCRO
+  // RECONHECIMENTO DE VOZ E TRADUÇÃO SIMULTÂNEA
   document.getElementById('btnStartTranslate').addEventListener('click', () => {
-    if(!SpeechRecognition) return alert('Use o navegador Chrome no celular para ativar a tradução por voz.');
+    if(!SpeechRecognition) return alert('Utilize o navegador Google Chrome no celular.');
 
     if(isTranslating) {
       if(recognition) recognition.stop();
@@ -282,7 +292,6 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
 
     recognition.onresult = async (event) => {
       const transcript = event.results[event.results.length - 1][0].transcript.trim();
-      
       if(!transcript || transcript.length < 2) return;
 
       const targetLang = document.getElementById('targetLang').value;
@@ -296,10 +305,8 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
           const translatedText = data.responseData.translatedText;
           if(translatedText.includes("NO QUERY SPECIFIED")) return;
 
-          // Exibe no próprio vídeo
           showSubtitle(myPeerId, transcript, translatedText);
 
-          // Envia para TODOS os celulares/computadores conectados na sala
           Object.values(activeConns).forEach(conn => {
             if(conn.open) {
               conn.send({ type: 'subtitle', peerId: myPeerId, original: transcript, translated: translatedText });
