@@ -2,11 +2,11 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Sistema de Mentoria & Reuniões Interativas</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Sala Interativa</title>
 <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&display=swap');
 
 :root {
   --panel: #12131a; --panel-2: #191b24; --panel-3: #20222e;
@@ -16,77 +16,87 @@
   --border: rgba(232,184,75,0.22);
 }
 
-* { box-sizing: border-box; }
+* { box-sizing: border-box; touch-action: manipulation; }
 body {
-  margin: 0; padding: 15px;
+  margin: 0; padding: 10px;
   background: radial-gradient(ellipse 90% 60% at 50% -10%, #1c2b3f 0%, #0a0b10 55%);
   min-height: 100vh; font-family: 'Inter', sans-serif; color: var(--cream);
   display: flex; justify-content: center;
 }
 
 .app { width: 100%; max-width: 950px; }
-h1, h2, h3 { font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.05em; margin: 0 0 10px; }
+h1, h2, h3 { font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.05em; text-align: center; margin: 0 0 10px; }
 
 .screen { display: none; }
 .screen.active { display: block; }
 
-.card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 20px; margin-bottom: 15px; }
+.card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 15px; margin-bottom: 12px; }
 
-.text-input { width: 100%; background: #08090d; border: 1.5px solid var(--border); color: var(--cream); font-size: 15px; padding: 12px; border-radius: 8px; margin-top: 6px; }
-.code-input { text-align: center; font-family: 'IBM Plex Mono', monospace; font-size: 24px; letter-spacing: 0.2em; text-transform: uppercase; }
+.text-input { width: 100%; background: #08090d; border: 1.5px solid var(--border); color: var(--cream); font-size: 15px; padding: 12px; border-radius: 8px; }
+.code-input { text-align: center; font-family: monospace; font-size: 22px; letter-spacing: 0.2em; text-transform: uppercase; }
 
+.btn-group { display: flex; gap: 8px; flex-wrap: wrap; }
 .big-btn {
-  height: 48px; border: none; border-radius: 10px; padding: 0 16px;
-  font-family: 'Bebas Neue', sans-serif; font-size: 18px; cursor: pointer; transition: 0.15s;
+  flex: 1; min-width: 130px; height: 44px; border: none; border-radius: 8px;
+  font-family: 'Bebas Neue', sans-serif; font-size: 17px; cursor: pointer; transition: 0.15s;
 }
 .big-btn.primary { background: linear-gradient(180deg, var(--success) 0%, #1f7d68 100%); color: #fff; }
 .big-btn.accent { background: linear-gradient(180deg, var(--gold) 0%, #a9781f 100%); color: #1a1200; }
 .big-btn.meeting { background: linear-gradient(180deg, #3f7fd1 0%, #1c4b82 100%); color: #fff; }
-.big-btn.danger { background: linear-gradient(180deg, var(--danger) 0%, #8a1f18 100%); color: #fff; }
 
-/* REUNIÃO E GRID DE VÍDEO */
-.video-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
-.video-card { position: relative; background: #000; border-radius: 10px; border: 1.5px solid var(--border); aspect-ratio: 4/3; overflow: hidden; }
+/* PAINEL DE INTEGRANTES */
+.users-panel { background: var(--panel-3); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; margin-bottom: 10px; font-size: 12px; }
+.users-list { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+.user-badge { background: rgba(232,184,75,0.15); border: 1px solid var(--gold); color: var(--gold-bright); padding: 3px 8px; border-radius: 15px; font-size: 11px; }
+
+/* GRID DE VÍDEOS */
+.video-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+.video-card { position: relative; background: #000; border-radius: 8px; border: 1px solid var(--border); aspect-ratio: 4/3; overflow: hidden; }
 .video-card video { width: 100%; height: 100%; object-fit: cover; }
-.video-card .tag { position: absolute; bottom: 6px; left: 6px; background: rgba(0,0,0,0.75); padding: 3px 8px; border-radius: 4px; font-size: 11px; color: var(--gold-bright); }
-.video-card .controls { position: absolute; top: 6px; right: 6px; display: flex; gap: 4px; }
-.mini-btn { background: rgba(0,0,0,0.8); border: 1px solid var(--border); color: #fff; font-size: 10px; padding: 4px 6px; border-radius: 4px; cursor: pointer; }
+.video-card .tag { position: absolute; bottom: 4px; left: 4px; background: rgba(0,0,0,0.75); padding: 2px 6px; border-radius: 4px; font-size: 10px; color: var(--gold-bright); z-index: 2; }
 
-/* LOUSA INTERATIVA (WHITEBOARD) */
-.whiteboard-container { background: #fff; border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 10px; }
-.whiteboard-toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; color: #000; }
-.color-picker { width: 25px; height: 25px; border-radius: 50%; cursor: pointer; border: 2px solid #ccc; }
-.color-picker.selected { border-color: #000; scale: 1.1; }
-canvas { background: #ffffff; border: 1px solid #ccc; border-radius: 6px; cursor: crosshair; width: 100%; height: 350px; }
+/* LOUSA E TELA INTEGRADAS */
+.whiteboard-container { background: #fff; border-radius: 8px; padding: 8px; display: flex; flex-direction: column; gap: 8px; }
+.whiteboard-toolbar { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; color: #000; font-size: 12px; }
+.color-picker { width: 22px; height: 22px; border-radius: 50%; cursor: pointer; border: 2px solid #ccc; }
+.color-picker.selected { border-color: #000; transform: scale(1.15); }
+.canvas-wrapper { position: relative; width: 100%; height: 380px; background: #fff; border-radius: 6px; overflow: hidden; }
+canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; cursor: crosshair; }
 
-/* CHAT FIXO ABAIXO */
-.chat-container { background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px; display: flex; flex-direction: column; height: 240px; }
-.chat-header { padding: 10px 14px; border-bottom: 1px solid var(--border); font-weight: 700; font-size: 12px; color: var(--gold); }
-.chat-messages { flex: 1; padding: 10px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
-.chat-msg { background: #0e0f14; padding: 8px 12px; border-radius: 6px; font-size: 13px; border-left: 3px solid var(--gold); }
-.chat-input-box { display: flex; gap: 8px; padding: 10px; border-top: 1px solid var(--border); }
-.chat-input-box input { flex: 1; background: #000; border: 1px solid var(--border); color: #fff; padding: 10px; border-radius: 6px; }
+/* CHAT */
+.chat-container { background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; display: flex; flex-direction: column; height: 220px; }
+.chat-header { padding: 8px 12px; border-bottom: 1px solid var(--border); font-weight: 700; font-size: 11px; color: var(--gold); }
+.chat-messages { flex: 1; padding: 8px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+.chat-msg { background: #0e0f14; padding: 6px 10px; border-radius: 6px; font-size: 12px; border-left: 3px solid var(--gold); }
+.chat-input-box { display: flex; gap: 6px; padding: 8px; border-top: 1px solid var(--border); }
+.chat-input-box input { flex: 1; background: #000; border: 1px solid var(--border); color: #fff; padding: 8px; border-radius: 6px; font-size: 13px; }
+
+@media (max-width: 600px) {
+  .canvas-wrapper { height: 260px; }
+  .video-grid { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); }
+  .big-btn { font-size: 15px; height: 40px; }
+}
 </style>
 </head>
 <body>
 
 <div class="app">
-  <h1>SALA <span style="color:var(--gold-bright)">INTERATIVA DE MENTORIA</span></h1>
+  <h1>SALA <span style="color:var(--gold-bright)">INTERATIVA</span></h1>
 
-  <!-- TELA INICIAL -->
+  <!-- INÍCIO -->
   <section class="screen active" id="screen-home">
     <div class="card">
       <label style="font-size: 12px; color: var(--cream-dim);">SEU NOME</label>
       <input class="text-input" id="userNameInput" placeholder="Digite seu nome..." maxlength="16">
       
-      <div style="margin-top: 15px;">
+      <div style="margin-top: 10px;">
         <label style="font-size: 12px; color: var(--cream-dim);">CÓDIGO DA SALA (4 DIGITOS)</label>
         <input class="text-input code-input" id="roomCodeInput" maxlength="4" placeholder="5747">
       </div>
       
-      <div style="display:flex; gap:10px; margin-top:10px;">
-        <button class="big-btn primary" id="btnJoin" style="flex:1;">Entrar na Sala</button>
-        <button class="big-btn accent" id="btnCreate" style="flex:1;">Criar Nova Sala (Anfitrião)</button>
+      <div class="btn-group" style="margin-top:12px;">
+        <button class="big-btn primary" id="btnJoin">Entrar na Sala</button>
+        <button class="big-btn accent" id="btnCreate">Criar Sala</button>
       </div>
     </div>
   </section>
@@ -95,60 +105,69 @@ canvas { background: #ffffff; border: 1px solid #ccc; border-radius: 6px; cursor
   <section class="screen" id="screen-room">
     <div class="card">
       <div style="text-align:center;">
-        <div style="font-size:11px; color:var(--cream-dim);">CÓDIGO DA SALA</div>
-        <h2 id="lblRoomCode" style="font-size:36px; color:var(--gold-bright); margin:0;">----</h2>
+        <div style="font-size:10px; color:var(--cream-dim);">CÓDIGO DA SALA</div>
+        <h2 id="lblRoomCode" style="font-size:32px; color:var(--gold-bright); margin:0;">----</h2>
       </div>
 
-      <!-- PAINEL DE AÇÕES DA AULA -->
-      <div style="margin-top:15px; display:flex; gap:8px; flex-wrap:wrap;">
-        <button class="big-btn meeting" id="btnModeMeeting">📹 Reunião (Vídeos)</button>
+      <div class="users-panel">
+        <strong style="color:var(--gold);">CONECTADOS:</strong>
+        <div class="users-list" id="usersList"></div>
+      </div>
+
+      <div class="btn-group">
+        <button class="big-btn meeting" id="btnToggleVideo">📹 Reunião (Vídeo)</button>
         <button class="big-btn accent" id="btnShareScreen">🖥️ Compartilhar Tela</button>
         <button class="big-btn primary" id="btnToggleBoard">🎨 Lousa Interativa</button>
       </div>
     </div>
 
-    <!-- AREA DE VÍDEOS -->
+    <!-- ÁREA DE VÍDEOS -->
     <div id="meetingArea" class="card">
-      <h3>Participantes na Reunião</h3>
+      <h3 style="margin:0 0 8px; font-size:14px; text-align:left; color:var(--cream-dim);">PARTICIPANTES</h3>
       <div class="video-grid" id="videoGrid"></div>
     </div>
 
-    <!-- LOUSA INTERATIVA (QUADRO BRANCO) -->
+    <!-- LOUSA INTERATIVA E TELA PARALELA -->
     <div id="boardArea" class="card" style="display:none;">
-      <h3>Lousa Interativa para Explicar Conteúdos</h3>
+      <h3 style="margin:0 0 8px; font-size:14px; text-align:left; color:var(--gold);">LOUSA INTERATIVA & ANOTAÇÕES</h3>
       <div class="whiteboard-container">
         <div class="whiteboard-toolbar">
-          <span><strong>Cores:</strong></span>
+          <span><strong>Cor:</strong></span>
           <div class="color-picker selected" style="background:#000000" onclick="setColor('#000000', this)"></div>
           <div class="color-picker" style="background:#d1352b" onclick="setColor('#d1352b', this)"></div>
           <div class="color-picker" style="background:#3f7fd1" onclick="setColor('#3f7fd1', this)"></div>
           <div class="color-picker" style="background:#2fa98c" onclick="setColor('#2fa98c', this)"></div>
 
-          <span style="margin-left:15px;"><strong>Ferramenta:</strong></span>
-          <select id="toolSelect" style="padding:4px; border-radius:4px;">
-            <option value="pen">Lápis (Livre)</option>
+          <span style="margin-left:8px;"><strong>Ferramenta:</strong></span>
+          <select id="toolSelect" style="padding:4px; border-radius:4px; font-size:12px;">
+            <option value="pen">Lápis</option>
+            <option value="text">Texto</option>
             <option value="line">Linha</option>
             <option value="arrow">Seta</option>
-            <option value="rect">Retângulo / Quadrado</option>
+            <option value="rect">Quadrado</option>
           </select>
 
-          <button onclick="clearBoard()" style="margin-left:auto; background:var(--danger); color:#fff; border:none; padding:6px 12px; border-radius:4px; cursor:pointer;">Limpar Lousa</button>
+          <button onclick="clearBoard()" style="margin-left:auto; background:var(--danger); color:#fff; border:none; padding:4px 8px; border-radius:4px; font-size:11px; cursor:pointer;">Limpar</button>
         </div>
-        <canvas id="paintCanvas" width="800" height="350"></canvas>
+        <div class="canvas-wrapper" id="canvasWrapper">
+          <canvas id="paintCanvas"></canvas>
+        </div>
       </div>
     </div>
 
     <!-- CHAT DA SALA -->
     <div class="chat-container">
-      <div class="chat-header">💬 CHAT DA AULA / MENTORIA</div>
+      <div class="chat-header">💬 CHAT DA SALA</div>
       <div class="chat-messages" id="chatBox"></div>
       <div class="chat-input-box">
-        <input type="text" id="msgInput" placeholder="Escreva uma pergunta ou mensagem..." maxlength="150">
-        <button class="big-btn accent" id="btnSend">Enviar</button>
+        <input type="text" id="msgInput" placeholder="Digite uma mensagem..." maxlength="150">
+        <button class="big-btn accent" id="btnSend" style="min-width:70px; height:36px; font-size:14px;">Enviar</button>
       </div>
     </div>
   </section>
 </div>
+
+<video id="hiddenScreenVideo" autoplay playsinline style="display:none;"></video>
 
 <script>
 (function(){
@@ -157,34 +176,44 @@ canvas { background: #ffffff; border: 1px solid #ccc; border-radius: 6px; cursor
   let screenStream = null;
   let myName = '';
   let roomCode = '';
-  let isHost = false;
+  let myPeerId = '';
+  const activeConns = [];
+  const connectedUsers = new Set();
 
+  const userNameInput = document.getElementById('userNameInput');
+  const roomCodeInput = document.getElementById('roomCodeInput');
   const videoGrid = document.getElementById('videoGrid');
   const chatBox = document.getElementById('chatBox');
   const msgInput = document.getElementById('msgInput');
+  const usersList = document.getElementById('usersList');
+  const hiddenScreenVideo = document.getElementById('hiddenScreenVideo');
 
   document.getElementById('btnCreate').addEventListener('click', () => {
-    isHost = true;
     startRoom(Math.floor(1000 + Math.random() * 9000).toString());
   });
 
   document.getElementById('btnJoin').addEventListener('click', () => {
-    const code = document.getElementById('roomCodeInput').value.trim();
+    const code = roomCodeInput.value.trim();
     if(code.length !== 4) return alert('Digite um código de 4 dígitos!');
     startRoom(code);
   });
 
   function startRoom(code) {
-    myName = document.getElementById('userNameInput').value.trim() || 'Participante';
+    myName = userNameInput.value.trim() || 'Participante';
     roomCode = code;
     
-    peer = new Peer('room' + roomCode + '-' + myName.toLowerCase().replace(/[^a-z0-9]/g, ''));
+    const cleanName = myName.toLowerCase().replace(/[^a-z0-9]/g, '');
+    myPeerId = 'room' + roomCode + '-' + cleanName;
+
+    peer = new Peer(myPeerId);
 
     peer.on('open', () => {
       document.getElementById('lblRoomCode').textContent = roomCode;
       document.getElementById('screen-home').classList.remove('active');
       document.getElementById('screen-room').classList.add('active');
-      addChatMessage('Sistema', `Bem-vindo à sala ${roomCode}, ${myName}! ${isHost ? '(Você é o Anfitrião)' : ''}`);
+      
+      addUserToList(myName + ' (Você)');
+      addChatMessage('Sistema', `Conectado como ${myName}. Código da Sala: ${roomCode}`);
       initCamera();
     });
 
@@ -195,32 +224,57 @@ canvas { background: #ffffff; border: 1px solid #ccc; border-radius: 6px; cursor
         addVideoFeed(call.peer, callerName, remoteStream);
       });
     });
+
+    peer.on('connection', (conn) => {
+      setupConnection(conn);
+    });
   }
 
   async function initCamera() {
     try {
       localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-      addVideoFeed('my-self', myName + ' (Você)', localStream, true);
+      addVideoFeed(myPeerId, myName + ' (Você)', localStream, true);
+      connectToPeers();
     } catch(e) {
-      alert('Erro ao acessar mídia.');
+      alert('Aviso: Câmera ou microfone não detectados.');
     }
   }
 
-  // COMPARTILHAR TELA
-  document.getElementById('btnShareScreen').addEventListener('click', async () => {
-    try {
-      screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-      addVideoFeed('screen-share', myName + ' (Tela Compartilhada)', screenStream, true);
-    } catch(e) {
-      alert('Não foi possível compartilhar a tela.');
-    }
-  });
+  function setupConnection(conn) {
+    if(!activeConns.includes(conn)) activeConns.push(conn);
 
-  // ALTERNAR LOUSA
-  document.getElementById('btnToggleBoard').addEventListener('click', () => {
-    const area = document.getElementById('boardArea');
-    area.style.display = area.style.display === 'none' ? 'block' : 'none';
-  });
+    conn.on('data', (data) => {
+      if(data.type === 'chat') addChatMessage(data.sender, data.text);
+      if(data.type === 'user-join') addUserToList(data.sender);
+    });
+
+    conn.on('open', () => {
+      conn.send({ type: 'user-join', sender: myName });
+    });
+  }
+
+  function addUserToList(name) {
+    connectedUsers.add(name);
+    usersList.innerHTML = '';
+    connectedUsers.forEach(user => {
+      const badge = document.createElement('span');
+      badge.className = 'user-badge';
+      badge.textContent = user;
+      usersList.appendChild(badge);
+    });
+  }
+
+  function connectToPeers() {
+    const knownUsers = ['joel', 'mirela', 'user1', 'user2', 'admin'];
+    knownUsers.forEach(target => {
+      const targetPeerId = 'room' + roomCode + '-' + target;
+      if(targetPeerId !== myPeerId) {
+        if(localStream) peer.call(targetPeerId, localStream);
+        const conn = peer.connect(targetPeerId);
+        if(conn) setupConnection(conn);
+      }
+    });
+  }
 
   function addVideoFeed(id, label, stream, isMuted = false) {
     if(document.getElementById('vcard-' + id)) return;
@@ -236,22 +290,53 @@ canvas { background: #ffffff; border: 1px solid #ccc; border-radius: 6px; cursor
     const tag = document.createElement('div');
     tag.className = 'tag'; tag.textContent = label;
 
-    // CONTROLES EXCLUSIVOS DO ANFITRIÃO
-    if(isHost && id !== 'my-self') {
-      const controls = document.createElement('div');
-      controls.className = 'controls';
-      controls.innerHTML = `
-        <button class="mini-btn" onclick="toggleRemoteAudio('${id}')">Mutar Áudio</button>
-        <button class="mini-btn" onclick="toggleRemoteVideo('${id}')">Desativar Vídeo</button>
-      `;
-      card.appendChild(controls);
-    }
-
     card.appendChild(video); card.appendChild(tag);
     videoGrid.appendChild(card);
+    
+    addUserToList(label.replace(' (Você)', ''));
+  }
+
+  // LOUSA E TRANSMISSÃO INTEGRADA
+  document.getElementById('btnToggleBoard').addEventListener('click', () => {
+    const area = document.getElementById('boardArea');
+    area.style.display = area.style.display === 'none' ? 'block' : 'none';
+    resizeCanvas();
+  });
+
+  document.getElementById('btnShareScreen').addEventListener('click', async () => {
+    try {
+      screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+      hiddenScreenVideo.srcObject = screenStream;
+      
+      // Exibe a lousa automaticamente sobre a tela compartilhada
+      document.getElementById('boardArea').style.display = 'block';
+      resizeCanvas();
+      drawScreenToCanvas();
+    } catch(e) {
+      alert('Compartilhamento cancelado ou não suportado.');
+    }
+  });
+
+  function drawScreenToCanvas() {
+    if(screenStream && screenStream.active) {
+      ctx.drawImage(hiddenScreenVideo, 0, 0, canvas.width, canvas.height);
+      requestAnimationFrame(drawScreenToCanvas);
+    }
   }
 
   // CHAT
+  function sendMsg() {
+    const text = msgInput.value.trim();
+    if(!text) return;
+
+    addChatMessage(myName + ' (Você)', text);
+    msgInput.value = '';
+
+    activeConns.forEach(conn => {
+      if(conn.open) conn.send({ type: 'chat', sender: myName, text: text });
+    });
+  }
+
   function addChatMessage(author, text) {
     const el = document.createElement('div');
     el.className = 'chat-msg';
@@ -260,21 +345,23 @@ canvas { background: #ffffff; border: 1px solid #ccc; border-radius: 6px; cursor
     chatBox.scrollTop = chatBox.scrollHeight;
   }
 
-  document.getElementById('btnSend').addEventListener('click', () => {
-    const text = msgInput.value.trim();
-    if(!text) return;
-    addChatMessage(myName + ' (Você)', text);
-    msgInput.value = '';
-  });
+  document.getElementById('btnSend').addEventListener('click', sendMsg);
+  msgInput.addEventListener('keydown', (e) => { if(e.key === 'Enter') sendMsg(); });
 
 })();
 
-// LÓGICA DA LOUSA INTERATIVA
+// QUADRO / LOUSA INTERATIVA
 const canvas = document.getElementById('paintCanvas');
 const ctx = canvas.getContext('2d');
 let painting = false;
 let startX, startY;
 let currentColor = '#000000';
+
+function resizeCanvas() {
+  const wrapper = document.getElementById('canvasWrapper');
+  canvas.width = wrapper.clientWidth;
+  canvas.height = wrapper.clientHeight;
+}
 
 function setColor(color, el) {
   currentColor = color;
@@ -286,47 +373,72 @@ function clearBoard() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 }
 
-canvas.addEventListener('mousedown', (e) => {
-  painting = true;
+function getPos(e) {
   const rect = canvas.getBoundingClientRect();
-  startX = e.clientX - rect.left;
-  startY = e.clientY - rect.top;
+  const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+  const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+  return { x: clientX - rect.left, y: clientY - rect.top };
+}
+
+function startDraw(e) {
+  const pos = getPos(e);
+  const tool = document.getElementById('toolSelect').value;
+
+  if(tool === 'text') {
+    const txt = prompt('Digite o texto a ser inserido:');
+    if(txt) {
+      ctx.fillStyle = currentColor;
+      ctx.font = '16px Inter, sans-serif';
+      ctx.fillText(txt, pos.x, pos.y);
+    }
+    return;
+  }
+
+  painting = true;
+  startX = pos.x;
+  startY = pos.y;
   ctx.beginPath();
   ctx.moveTo(startX, startY);
-});
+}
 
-canvas.addEventListener('mouseup', (e) => {
+function endDraw(e) {
   if(!painting) return;
   painting = false;
-  const rect = canvas.getBoundingClientRect();
-  const endX = e.clientX - rect.left;
-  const endY = e.clientY - rect.top;
+  const pos = getPos(e.changedTouches ? e.changedTouches[0] : e);
   const tool = document.getElementById('toolSelect').value;
 
   ctx.strokeStyle = currentColor;
   ctx.lineWidth = 3;
 
   if(tool === 'line') {
-    ctx.lineTo(endX, endY);
+    ctx.lineTo(pos.x, pos.y);
     ctx.stroke();
   } else if(tool === 'rect') {
-    ctx.strokeRect(startX, startY, endX - startX, endY - startY);
+    ctx.strokeRect(startX, startY, pos.x - startX, pos.y - startY);
   } else if(tool === 'arrow') {
-    drawArrow(startX, startY, endX, endY);
+    drawArrow(startX, startY, pos.x, pos.y);
   }
-});
+}
 
-canvas.addEventListener('mousemove', (e) => {
+function moveDraw(e) {
   if(!painting) return;
   const tool = document.getElementById('toolSelect').value;
   if(tool === 'pen') {
-    const rect = canvas.getBoundingClientRect();
+    const pos = getPos(e);
     ctx.strokeStyle = currentColor;
     ctx.lineWidth = 3;
-    ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
+    ctx.lineTo(pos.x, pos.y);
     ctx.stroke();
   }
-});
+}
+
+canvas.addEventListener('mousedown', startDraw);
+canvas.addEventListener('mouseup', endDraw);
+canvas.addEventListener('mousemove', moveDraw);
+
+canvas.addEventListener('touchstart', startDraw);
+canvas.addEventListener('touchend', endDraw);
+canvas.addEventListener('touchmove', moveDraw);
 
 function drawArrow(fromx, fromy, tox, toy) {
   const headlen = 10;
