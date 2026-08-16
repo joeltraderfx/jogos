@@ -335,7 +335,6 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     const code = roomCodeInput.value.trim() || Math.floor(1000 + Math.random() * 9000).toString();
     isHost = true;
     startRoom(code);
-    requestLocalMedia();
   });
 
   document.getElementById('btnJoin').addEventListener('click', () => {
@@ -343,7 +342,6 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     if(code.length !== 4) return showToast('Digite o código de 4 dígitos!');
     isHost = false;
     startRoom(code);
-    requestLocalMedia();
   });
 
   function startRoom(code) {
@@ -553,12 +551,29 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
 
   /* ================= Media ================= */
   async function requestLocalMedia(){
-    if(mediaStarted || !navigator.mediaDevices?.getUserMedia) return;
+    if(mediaStarted) return;
+    if(!window.isSecureContext || !navigator.mediaDevices?.getUserMedia){
+      showToast(currentLocale === 'en' ? 'Camera and microphone require HTTPS. Open the secure link.' : 'A câmera e o microfone precisam de HTTPS. Abra o link seguro.');
+      return;
+    }
+    const mediaRequests = [
+      { video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } }, audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } },
+      { video: true, audio: true }
+    ];
+    let lastError = null;
+    for(const constraints of mediaRequests){
+      try{
+        localStream = await navigator.mediaDevices.getUserMedia(constraints);
+        if(localStream.getVideoTracks().length && localStream.getAudioTracks().length) break;
+        localStream.getTracks().forEach(track => track.stop());
+        localStream = null;
+      }catch(error){
+        lastError = error;
+        if(error?.name === 'NotAllowedError' || error?.name === 'SecurityError') break;
+      }
+    }
     try {
-      localStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
-      });
+      if(!localStream) throw lastError || new Error('media-unavailable');
       mediaStarted = true;
       addVideoFeed(myPeerId, myName + ' (Você)', localStream, true);
       document.getElementById('btnStartMedia').style.display = 'none';
@@ -580,7 +595,17 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
         if(!activeCalls[id]) callPeer(id);
       });
     } catch(e) {
-      showToast(currentLocale === 'en' ? 'Allow camera and microphone access in your browser.' : 'Autorize a câmera e o microfone nas configurações do seu navegador.');
+      const errorName = e?.name || 'UnknownError';
+      const messages = {
+        NotAllowedError: currentLocale === 'en' ? 'Chrome blocked camera/microphone. Click the camera icon near the address bar and choose Allow, then reload.' : 'O Chrome bloqueou câmera/microfone. Clique no ícone de câmera ao lado do endereço, escolha Permitir e recarregue a página.',
+        NotFoundError: currentLocale === 'en' ? 'No camera or microphone was found on this device.' : 'Nenhuma câmera ou microfone foi encontrado neste dispositivo.',
+        NotReadableError: currentLocale === 'en' ? 'Camera or microphone is being used by another application.' : 'A câmera ou o microfone está sendo usado por outro aplicativo.',
+        OverconstrainedError: currentLocale === 'en' ? 'The requested camera settings are not available.' : 'As configurações solicitadas da câmera não estão disponíveis.',
+        SecurityError: currentLocale === 'en' ? 'The browser blocked media access for security reasons. Use the HTTPS address.' : 'O navegador bloqueou o acesso por segurança. Use o endereço HTTPS.',
+        UnknownError: currentLocale === 'en' ? 'Could not activate camera and microphone. Check the site permissions and try again.' : 'Não foi possível ativar câmera e microfone. Verifique as permissões do site e tente novamente.'
+      };
+      console.error('getUserMedia failed:', errorName, e);
+      showToast(messages[errorName] || messages.UnknownError);
     }
   }
 
