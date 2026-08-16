@@ -483,7 +483,11 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
         break;
 
       case 'kick':
-        handleBeingKicked();
+        handleBeingKicked('Você foi removido da sala pelo anfitrião.');
+        break;
+
+      case 'meeting-ended':
+        handleBeingKicked('O anfitrião encerrou a reunião.');
         break;
 
       case 'draw':
@@ -718,7 +722,8 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     }
   });
 
-  function handleBeingKicked(){
+  function handleBeingKicked(message){
+    document.getElementById('kickedMsg').textContent = message || 'Você foi removido da sala.';
     document.getElementById('kickedOverlay').classList.add('show');
     setTimeout(()=>{
       cleanupAndReturnHome();
@@ -757,7 +762,12 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
   }
 
   document.getElementById('btnLeave').addEventListener('click', () => {
-    broadcastAll({ type: 'peer-left', peerId: myPeerId });
+    if(isHost){
+      broadcastAll({ type: 'meeting-ended' });
+      showToast('Reunião encerrada para todos os participantes.');
+    } else {
+      broadcastAll({ type: 'peer-left', peerId: myPeerId });
+    }
     cleanupAndReturnHome();
   });
 
@@ -1054,6 +1064,9 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     };
 
     recognition.onerror = (e) => {
+      // 'no-speech' fires constantly during normal pauses, and 'aborted'
+      // fires whenever we restart recognition — neither is a real problem.
+      if(e.error === 'no-speech' || e.error === 'aborted') return;
       showToast('Erro no reconhecimento de voz: ' + (e.error || 'desconhecido'));
     };
 
