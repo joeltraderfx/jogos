@@ -6,10 +6,10 @@
 <title>Sala Interativa</title>
 <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;600;700&display=swap');
 
 :root {
-  --panel: #12131a; --panel-2: #191b24; --panel-3: #20222e;
+  --panel: #12131a; --panel-2: #191b24;
   --gold: #e8b84b; --gold-bright: #ffd876;
   --success: #2fa98c; --danger: #d1352b;
   --cream: #f4ede1; --cream-dim: #9a958d;
@@ -31,28 +31,37 @@ h1 { font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.05em; text-align: 
 .screen.active { display: block; }
 .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 15px; margin-bottom: 12px; }
 
-.text-input { width: 100%; background: #08090d; border: 1.5px solid var(--border); color: var(--cream); font-size: 15px; padding: 12px; border-radius: 8px; }
-.code-input { text-align: center; font-family: monospace; font-size: 22px; letter-spacing: 0.2em; text-transform: uppercase; }
+.text-input { width: 100%; background: #08090d; border: 1.5px solid var(--border); color: var(--cream); font-size: 16px; padding: 12px; border-radius: 8px; }
+.code-input { text-align: center; font-family: monospace; font-size: 24px; letter-spacing: 0.2em; text-transform: uppercase; }
 
 .btn-group { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
 .big-btn {
-  flex: 1; min-width: 130px; height: 44px; border: none; border-radius: 8px;
-  font-family: 'Bebas Neue', sans-serif; font-size: 16px; cursor: pointer; color: #fff;
+  flex: 1; min-width: 130px; height: 48px; border: none; border-radius: 8px;
+  font-family: 'Bebas Neue', sans-serif; font-size: 18px; cursor: pointer; color: #fff;
 }
 .big-btn.primary { background: linear-gradient(180deg, var(--success) 0%, #1f7d68 100%); }
 .big-btn.accent { background: linear-gradient(180deg, var(--gold) 0%, #a9781f 100%); color: #1a1200; }
 .big-btn.meeting { background: linear-gradient(180deg, #3f7fd1 0%, #1c4b82 100%); }
 
-.video-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; margin-top:10px; }
-.video-card { position: relative; background: #000; border-radius: 8px; border: 1px solid var(--border); aspect-ratio: 4/3; overflow: hidden; }
+.video-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; margin-top:10px; }
+.video-card { position: relative; background: #000; border-radius: 10px; border: 1.5px solid var(--border); aspect-ratio: 4/3; overflow: hidden; }
 .video-card video { width: 100%; height: 100%; object-fit: cover; }
-.video-card .tag { position: absolute; top: 8px; left: 8px; background: rgba(0,0,0,0.8); padding: 4px 8px; border-radius: 4px; font-size: 12px; color: var(--gold-bright); font-weight: bold; z-index: 2; }
-.subtitles { position: absolute; bottom: 10px; left: 5%; width: 90%; text-align: center; background: rgba(0,0,0,0.85); color: #fff; font-size: 13px; padding: 6px; border-radius: 6px; z-index: 3; display: none; }
-.subtitles.active { display: block; }
-.sub-translated { color: var(--gold-bright); font-weight: bold; margin-top: 2px; font-size: 14px; }
+.video-card .tag { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.85); padding: 6px 12px; border-radius: 6px; font-size: 14px; color: var(--gold-bright); font-weight: bold; z-index: 2; border: 1px solid var(--border); }
 
-.translation-bar { background: var(--panel-2); padding: 10px; border-radius: 8px; border: 1px solid #3f7fd1; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center; font-size: 12px; }
-select { background: #000; color: #fff; border: 1px solid var(--border); padding: 6px; border-radius: 4px; }
+/* FONTE AMPLIADA PARA LEITURA FÁCIL NO CELULAR */
+.subtitles { position: absolute; bottom: 12px; left: 4%; width: 92%; text-align: center; background: rgba(0,0,0,0.9); color: #fff; font-size: 16px; padding: 10px; border-radius: 8px; z-index: 3; display: none; border: 1px solid var(--gold); }
+.subtitles.active { display: block; }
+.sub-translated { color: var(--gold-bright); font-weight: 700; margin-top: 4px; font-size: 18px; line-height: 1.2; }
+
+.translation-bar { background: var(--panel-2); padding: 12px; border-radius: 10px; border: 1px solid #3f7fd1; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: center; font-size: 14px; }
+select { background: #000; color: #fff; border: 1px solid var(--border); padding: 8px; border-radius: 6px; font-size: 14px; }
+
+@media (max-width: 600px) {
+  .subtitles { font-size: 15px; }
+  .sub-translated { font-size: 17px; }
+  .translation-bar { flex-direction: column; align-items: stretch; }
+  select { width: 100%; }
+}
 </style>
 </head>
 <body>
@@ -62,11 +71,11 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
 
   <section class="screen active" id="screen-home">
     <div class="card">
-      <label style="font-size: 12px; color: var(--cream-dim);">SEU NOME</label>
-      <input class="text-input" id="userNameInput" placeholder="Ex: Joel..." maxlength="16">
+      <label style="font-size: 13px; color: var(--cream-dim);">SEU NOME</label>
+      <input class="text-input" id="userNameInput" placeholder="Ex: Joel / Sophia..." maxlength="16">
       
-      <div style="margin-top: 10px;">
-        <label style="font-size: 12px; color: var(--cream-dim);">CÓDIGO DA SALA (4 DIGITOS)</label>
+      <div style="margin-top: 12px;">
+        <label style="font-size: 13px; color: var(--cream-dim);">CÓDIGO DA SALA (4 DIGITOS)</label>
         <input class="text-input code-input" id="roomCodeInput" maxlength="4" placeholder="1900">
       </div>
       
@@ -79,8 +88,8 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
 
   <section class="screen" id="screen-room">
     <div class="card" style="text-align:center;">
-      <div style="font-size:11px; color:var(--cream-dim);">CÓDIGO DA SALA</div>
-      <h2 id="lblRoomCode" style="font-size:32px; color:var(--gold-bright); margin:0;">----</h2>
+      <div style="font-size:12px; color:var(--cream-dim);">CÓDIGO DA SALA</div>
+      <h2 id="lblRoomCode" style="font-size:36px; color:var(--gold-bright); margin:0;">----</h2>
       
       <div class="btn-group" style="justify-content: center;">
         <button class="big-btn meeting" id="btnStartMedia">📸 ATIVAR MINHA CÂMERA E ÁUDIO</button>
@@ -89,7 +98,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
 
     <div class="translation-bar">
       <strong>🌐 Tradução Simultânea:</strong>
-      <label>Falo:</label>
+      <label>Eu falo:</label>
       <select id="myLang">
         <option value="pt-BR">Português (Brasil)</option>
         <option value="en-US">Inglês (EUA)</option>
@@ -103,11 +112,11 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
         <option value="es">Espanhol</option>
       </select>
       
-      <button id="btnStartTranslate" style="background:var(--success); color:#fff; border:none; padding:6px 12px; border-radius:4px; cursor:pointer;">Ativar Legendas</button>
+      <button id="btnStartTranslate" style="background:var(--success); color:#fff; border:none; padding:10px 16px; border-radius:6px; cursor:pointer; font-weight:bold;">Ativar Legendas</button>
     </div>
 
     <div class="card" style="margin-top:12px;">
-      <h3 style="margin:0 0 8px; font-size:14px; text-align:left; color:var(--cream-dim);">VÍDEOS DA REUNIÃO</h3>
+      <h3 style="margin:0 0 8px; font-size:15px; text-align:left; color:var(--cream-dim);">PARTICIPANTES NA SALA</h3>
       <div class="video-grid" id="videoGrid"></div>
     </div>
   </section>
@@ -120,7 +129,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
   let myName = '';
   let roomCode = '';
   let myPeerId = '';
-  const connections = {};
+  const activeConns = {};
 
   const userNameInput = document.getElementById('userNameInput');
   const roomCodeInput = document.getElementById('roomCodeInput');
@@ -131,12 +140,13 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
   let isTranslating = false;
 
   document.getElementById('btnCreate').addEventListener('click', () => {
-    startRoom(Math.floor(1000 + Math.random() * 9000).toString());
+    const code = Math.floor(1000 + Math.random() * 9000).toString();
+    startRoom(code);
   });
 
   document.getElementById('btnJoin').addEventListener('click', () => {
     const code = roomCodeInput.value.trim();
-    if(code.length !== 4) return alert('Digite um código de 4 dígitos!');
+    if(code.length !== 4) return alert('Digite o código de 4 dígitos!');
     startRoom(code);
   });
 
@@ -144,9 +154,8 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     myName = userNameInput.value.trim() || 'Usuário';
     roomCode = code;
     
-    // ID único baseado no nome e timestamp para permitir múltiplos acessos na mesma sala
-    myPeerId = 'room-' + roomCode + '-' + Math.random().toString(36).substr(2, 6);
-
+    // Gera ID único para o PeerJS garantindo reconexão sem conflitos
+    myPeerId = 'sala-' + roomCode + '-' + Math.random().toString(36).substr(2, 6);
     peer = new Peer(myPeerId);
 
     peer.on('open', () => {
@@ -155,15 +164,17 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       document.getElementById('screen-room').classList.add('active');
     });
 
+    // Receber chamadas de áudio/vídeo
     peer.on('call', (call) => {
       call.answer(localStream);
       call.on('stream', (remoteStream) => {
-        addVideoFeed(call.peer, call.metadata?.name || 'Participante', remoteStream);
+        addVideoFeed(call.peer, call.metadata?.name || 'Conectado', remoteStream);
       });
     });
 
+    // Receber dados de legenda e nome
     peer.on('connection', (conn) => {
-      setupConnection(conn);
+      registerDataChannel(conn);
     });
   }
 
@@ -173,31 +184,47 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       addVideoFeed(myPeerId, myName + ' (Você)', localStream, true);
       document.getElementById('btnStartMedia').style.display = 'none';
       
-      // Conecta dinamicamente aos outros integrantes da sala
-      broadcastPresence();
+      connectToRoomPeers();
     } catch(e) {
-      alert('Permissão de câmera negada ou indisponível.');
+      alert('Por favor, autorize o acesso à câmera e microfone no celular.');
     }
   });
 
-  function broadcastPresence() {
-    // Tenta conectar com potenciais pares na mesma sala enviando handshake
-    const conn = peer.connect('room-' + roomCode + '-host');
-    if(conn) setupConnection(conn);
+  // Conecta aos participantes ativos
+  function connectToRoomPeers() {
+    // Tenta conectar com o prefixo comum da sala
+    peer.listAllPeers && peer.listAllPeers((peers) => {
+      peers.forEach(peerId => {
+        if(peerId.startsWith('sala-' + roomCode) && peerId !== myPeerId) {
+          connectToPeer(peerId);
+        }
+      });
+    });
   }
 
-  function setupConnection(conn) {
-    connections[conn.peer] = conn;
+  function connectToPeer(targetPeerId) {
+    if(activeConns[targetPeerId]) return;
+
+    const conn = peer.connect(targetPeerId);
+    registerDataChannel(conn);
+
+    if(localStream) {
+      const call = peer.call(targetPeerId, localStream, { metadata: { name: myName } });
+      call.on('stream', (remoteStream) => {
+        addVideoFeed(targetPeerId, 'Carregando...', remoteStream);
+      });
+    }
+  }
+
+  function registerDataChannel(conn) {
+    activeConns[conn.peer] = conn;
 
     conn.on('open', () => {
-      conn.send({ type: 'handshake', name: myName, peerId: myPeerId });
-      if(localStream) {
-        peer.call(conn.peer, localStream, { metadata: { name: myName } });
-      }
+      conn.send({ type: 'name', name: myName, peerId: myPeerId });
     });
 
     conn.on('data', (data) => {
-      if(data.type === 'handshake') {
+      if(data.type === 'name') {
         updateVideoTag(conn.peer, data.name);
       }
       if(data.type === 'subtitle') {
@@ -232,9 +259,9 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     if(tag) tag.textContent = name;
   }
 
-  // TRADUÇÃO SEM EXIBIR ERRO DE SILÊNCIO
+  // TRADUÇÃO E LEGENDA SINCRO
   document.getElementById('btnStartTranslate').addEventListener('click', () => {
-    if(!SpeechRecognition) return alert('Reconhecimento de voz não suportado neste navegador. Use o Chrome.');
+    if(!SpeechRecognition) return alert('Use o navegador Chrome no celular para ativar a tradução por voz.');
 
     if(isTranslating) {
       if(recognition) recognition.stop();
@@ -256,7 +283,6 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     recognition.onresult = async (event) => {
       const transcript = event.results[event.results.length - 1][0].transcript.trim();
       
-      // Validação para evitar envio de ruídos vazios
       if(!transcript || transcript.length < 2) return;
 
       const targetLang = document.getElementById('targetLang').value;
@@ -266,24 +292,21 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
         const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(transcript)}&langpair=${sourceLang}|${targetLang}`);
         const data = await res.json();
         
-        // Garante que só exibe o texto se houver uma resposta válida de tradução
         if(data && data.responseData && data.responseData.translatedText) {
           const translatedText = data.responseData.translatedText;
-
-          // Se a API retornar mensagem de erro interna, ignora e não exibe
           if(translatedText.includes("NO QUERY SPECIFIED")) return;
 
+          // Exibe no próprio vídeo
           showSubtitle(myPeerId, transcript, translatedText);
 
-          Object.values(connections).forEach(conn => {
+          // Envia para TODOS os celulares/computadores conectados na sala
+          Object.values(activeConns).forEach(conn => {
             if(conn.open) {
               conn.send({ type: 'subtitle', peerId: myPeerId, original: transcript, translated: translatedText });
             }
           });
         }
-      } catch(e) {
-        console.log("Aguardando fala...");
-      }
+      } catch(e) {}
     };
 
     recognition.onend = () => { if(isTranslating) recognition.start(); };
@@ -299,7 +322,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     subEl.classList.add('active');
 
     clearTimeout(subtitleTimers[peerId]);
-    subtitleTimers[peerId] = setTimeout(() => { subEl.classList.remove('active'); }, 5000);
+    subtitleTimers[peerId] = setTimeout(() => { subEl.classList.remove('active'); }, 6000);
   }
 
 })();
