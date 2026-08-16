@@ -65,6 +65,8 @@ h1 { font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.05em; text-align: 
 .video-card video { width: 100%; height: 100%; object-fit: cover; }
 .video-card .tag { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.85); padding: 6px 10px; border-radius: 6px; font-size: 13px; color: var(--gold-bright); font-weight: bold; z-index: 2; border: 1px solid var(--border); display:flex; align-items:center; gap:6px; }
 .video-card .tag .mic-off{ color: var(--danger); }
+.video-card .tag .translate-on{ color: var(--info); display:none; }
+.video-card .tag .translate-on.show{ display:inline; }
 .video-card .host-tools{ position:absolute; top:10px; right:10px; display:flex; gap:6px; z-index:2; }
 .video-card .host-tools button{ width:30px; height:30px; border-radius:50%; border:none; font-size:14px; cursor:pointer; background:rgba(0,0,0,0.75); color:#fff; }
 .video-card .host-tools button.mute-btn.active{ background: var(--danger); }
@@ -501,6 +503,10 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       case 'wb-close':
         setWhiteboardOpen(false, false);
         break;
+
+      case 'translate-state':
+        updateTranslateBadge(fromId, !!data.active);
+        break;
     }
   }
 
@@ -519,6 +525,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     if(activeConns[peerId]){ try{ activeConns[peerId].close(); }catch(e){} delete activeConns[peerId]; }
     myInitiatedConns.delete(peerId);
     delete participants[peerId];
+    delete translateActiveState[peerId];
     removeVideoFeed(peerId);
     renderParticipantsList();
     if(isHost && !viaBroadcast){
@@ -636,7 +643,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
 
     const tag = document.createElement('div');
     tag.className = 'tag'; tag.id = 'tag-' + id;
-    tag.innerHTML = '<span class="tag-name">'+escapeHtml(label)+'</span><span class="mic-off" id="micoff-'+id+'" style="display:none;">🔇</span>';
+    tag.innerHTML = '<span class="tag-name">'+escapeHtml(label)+'</span><span class="mic-off" id="micoff-'+id+'" style="display:none;">🔇</span><span class="translate-on" id="translateon-'+id+'" title="Legendas ativas">🌐</span>';
 
     card.appendChild(video); card.appendChild(tag);
 
@@ -650,6 +657,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     }
 
     videoGrid.appendChild(card);
+    if(translateActiveState[id]) updateTranslateBadge(id, true);
     updateParticipantCount();
   }
 
@@ -674,6 +682,13 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
   function updateMicIndicator(id, muted){
     const el = document.getElementById('micoff-' + id);
     if(el) el.style.display = muted ? '' : 'none';
+  }
+
+  const translateActiveState = {}; // peerId -> bool, so badges survive tile re-creation
+  function updateTranslateBadge(id, active){
+    translateActiveState[id] = active;
+    const el = document.getElementById('translateon-' + id);
+    if(el) el.classList.toggle('show', active);
   }
 
   function updateParticipantCount(){
@@ -732,6 +747,11 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     for(const k in activeConns) delete activeConns[k];
     for(const k in activeCalls) delete activeCalls[k];
     myInitiatedConns.clear();
+    for(const k in translateActiveState) delete translateActiveState[k];
+    isTranslating = false;
+    if(recognition){ try{ recognition.stop(); }catch(e){} recognition = null; }
+    document.getElementById('btnStartTranslate').textContent = "Ativar Legendas";
+    document.getElementById('btnStartTranslate').style.background = "var(--success)";
     wbShapes = [];
     document.getElementById('chatMessages').innerHTML = '';
   }
@@ -981,12 +1001,16 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       isTranslating = false;
       document.getElementById('btnStartTranslate').textContent = "Ativar Legendas";
       document.getElementById('btnStartTranslate').style.background = "var(--success)";
+      broadcastAll({ type: 'translate-state', active: false });
+      updateTranslateBadge(myPeerId, false);
       return;
     }
 
     isTranslating = true;
     document.getElementById('btnStartTranslate').textContent = "Parar Legendas";
     document.getElementById('btnStartTranslate').style.background = "var(--danger)";
+    broadcastAll({ type: 'translate-state', active: true });
+    updateTranslateBadge(myPeerId, true);
 
     recognition = new SpeechRecognition();
     recognition.continuous = true;
