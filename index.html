@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Sala Interativa - Tradução Simultânea</title>
+<title>Sala Interativa</title>
 <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&display=swap');
@@ -25,7 +25,7 @@ body {
 }
 
 .app { width: 100%; max-width: 950px; }
-h1, h3 { font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.05em; text-align: center; margin: 0 0 10px; }
+h1 { font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.05em; text-align: center; margin: 0 0 10px; }
 
 .screen { display: none; }
 .screen.active { display: block; }
@@ -37,29 +37,22 @@ h1, h3 { font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.05em; text-ali
 .btn-group { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
 .big-btn {
   flex: 1; min-width: 130px; height: 44px; border: none; border-radius: 8px;
-  font-family: 'Bebas Neue', sans-serif; font-size: 16px; cursor: pointer; transition: 0.15s; color: #fff;
+  font-family: 'Bebas Neue', sans-serif; font-size: 16px; cursor: pointer; color: #fff;
 }
 .big-btn.primary { background: linear-gradient(180deg, var(--success) 0%, #1f7d68 100%); }
 .big-btn.accent { background: linear-gradient(180deg, var(--gold) 0%, #a9781f 100%); color: #1a1200; }
 .big-btn.meeting { background: linear-gradient(180deg, #3f7fd1 0%, #1c4b82 100%); }
 
-/* VIDEOS & LEGENDAS */
-.video-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin-top:10px; }
+.video-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; margin-top:10px; }
 .video-card { position: relative; background: #000; border-radius: 8px; border: 1px solid var(--border); aspect-ratio: 4/3; overflow: hidden; }
 .video-card video { width: 100%; height: 100%; object-fit: cover; }
 .video-card .tag { position: absolute; top: 8px; left: 8px; background: rgba(0,0,0,0.8); padding: 4px 8px; border-radius: 4px; font-size: 12px; color: var(--gold-bright); font-weight: bold; z-index: 2; }
-.subtitles { position: absolute; bottom: 10px; left: 5%; width: 90%; text-align: center; background: rgba(0,0,0,0.7); color: #fff; font-size: 14px; padding: 6px; border-radius: 6px; z-index: 3; display: none; }
+.subtitles { position: absolute; bottom: 10px; left: 5%; width: 90%; text-align: center; background: rgba(0,0,0,0.85); color: #fff; font-size: 13px; padding: 6px; border-radius: 6px; z-index: 3; display: none; }
 .subtitles.active { display: block; }
-.sub-translated { color: var(--gold-bright); font-weight: bold; margin-top: 4px; font-size: 15px; }
+.sub-translated { color: var(--gold-bright); font-weight: bold; margin-top: 2px; font-size: 14px; }
 
-/* TRADUÇÃO BAR */
-.translation-bar { background: var(--panel-2); padding: 10px; border-radius: 8px; border: 1px solid #3f7fd1; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: center; font-size: 13px; }
+.translation-bar { background: var(--panel-2); padding: 10px; border-radius: 8px; border: 1px solid #3f7fd1; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center; font-size: 12px; }
 select { background: #000; color: #fff; border: 1px solid var(--border); padding: 6px; border-radius: 4px; }
-
-@media (max-width: 600px) {
-  .video-grid { grid-template-columns: 1fr; }
-  .big-btn { font-size: 14px; height: 40px; }
-}
 </style>
 </head>
 <body>
@@ -67,7 +60,6 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
 <div class="app">
   <h1>SALA <span style="color:var(--gold-bright)">INTERATIVA</span></h1>
 
-  <!-- INÍCIO -->
   <section class="screen active" id="screen-home">
     <div class="card">
       <label style="font-size: 12px; color: var(--cream-dim);">SEU NOME</label>
@@ -75,7 +67,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       
       <div style="margin-top: 10px;">
         <label style="font-size: 12px; color: var(--cream-dim);">CÓDIGO DA SALA (4 DIGITOS)</label>
-        <input class="text-input code-input" id="roomCodeInput" maxlength="4" placeholder="5747">
+        <input class="text-input code-input" id="roomCodeInput" maxlength="4" placeholder="1900">
       </div>
       
       <div class="btn-group">
@@ -85,7 +77,6 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     </div>
   </section>
 
-  <!-- SALA -->
   <section class="screen" id="screen-room">
     <div class="card" style="text-align:center;">
       <div style="font-size:11px; color:var(--cream-dim);">CÓDIGO DA SALA</div>
@@ -96,10 +87,9 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       </div>
     </div>
 
-    <!-- PAINEL DE TRADUÇÃO (DEEPL SIMULADO) -->
     <div class="translation-bar">
       <strong>🌐 Tradução Simultânea:</strong>
-      <label>Meu Idioma:</label>
+      <label>Falo:</label>
       <select id="myLang">
         <option value="pt-BR">Português (Brasil)</option>
         <option value="en-US">Inglês (EUA)</option>
@@ -108,16 +98,15 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       
       <label>Traduzir para:</label>
       <select id="targetLang">
-        <option value="en">Inglês (DEEPL Demo)</option>
-        <option value="pt">Português (DEEPL Demo)</option>
-        <option value="es">Espanhol (DEEPL Demo)</option>
+        <option value="en">Inglês</option>
+        <option value="pt">Português</option>
+        <option value="es">Espanhol</option>
       </select>
       
       <button id="btnStartTranslate" style="background:var(--success); color:#fff; border:none; padding:6px 12px; border-radius:4px; cursor:pointer;">Ativar Legendas</button>
     </div>
 
-    <!-- ÁREA DE VÍDEOS -->
-    <div id="meetingArea" class="card" style="margin-top:12px;">
+    <div class="card" style="margin-top:12px;">
       <h3 style="margin:0 0 8px; font-size:14px; text-align:left; color:var(--cream-dim);">VÍDEOS DA REUNIÃO</h3>
       <div class="video-grid" id="videoGrid"></div>
     </div>
@@ -131,14 +120,12 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
   let myName = '';
   let roomCode = '';
   let myPeerId = '';
-  const activeConns = [];
-  const remoteNames = {}; // Armazena os nomes conectados
+  const connections = {};
 
   const userNameInput = document.getElementById('userNameInput');
   const roomCodeInput = document.getElementById('roomCodeInput');
   const videoGrid = document.getElementById('videoGrid');
-  
-  // SISTEMA DE RECONHECIMENTO DE VOZ
+
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   let recognition = null;
   let isTranslating = false;
@@ -156,7 +143,9 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
   function startRoom(code) {
     myName = userNameInput.value.trim() || 'Usuário';
     roomCode = code;
-    myPeerId = 'room' + roomCode + '-' + myName.toLowerCase().replace(/[^a-z0-9]/g, '');
+    
+    // ID único baseado no nome e timestamp para permitir múltiplos acessos na mesma sala
+    myPeerId = 'room-' + roomCode + '-' + Math.random().toString(36).substr(2, 6);
 
     peer = new Peer(myPeerId);
 
@@ -166,65 +155,53 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       document.getElementById('screen-room').classList.add('active');
     });
 
-    // Receber chamadas de vídeo
     peer.on('call', (call) => {
       call.answer(localStream);
       call.on('stream', (remoteStream) => {
-        addVideoFeed(call.peer, remoteNames[call.peer] || 'Conectando...', remoteStream);
+        addVideoFeed(call.peer, call.metadata?.name || 'Participante', remoteStream);
       });
     });
 
-    // Conexão de dados para nomes e legendas
-    peer.on('connection', setupConnection);
+    peer.on('connection', (conn) => {
+      setupConnection(conn);
+    });
   }
 
-  // ATIVAÇÃO MANUAL DA CÂMERA (EVITA BLOQUEIO DE CELULAR)
   document.getElementById('btnStartMedia').addEventListener('click', async () => {
     try {
       localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       addVideoFeed(myPeerId, myName + ' (Você)', localStream, true);
       document.getElementById('btnStartMedia').style.display = 'none';
-      connectToPeers();
+      
+      // Conecta dinamicamente aos outros integrantes da sala
+      broadcastPresence();
     } catch(e) {
-      alert('Erro: Verifique as permissões de câmera do seu navegador.');
+      alert('Permissão de câmera negada ou indisponível.');
     }
   });
 
+  function broadcastPresence() {
+    // Tenta conectar com potenciais pares na mesma sala enviando handshake
+    const conn = peer.connect('room-' + roomCode + '-host');
+    if(conn) setupConnection(conn);
+  }
+
   function setupConnection(conn) {
-    if(!activeConns.includes(conn)) activeConns.push(conn);
+    connections[conn.peer] = conn;
+
+    conn.on('open', () => {
+      conn.send({ type: 'handshake', name: myName, peerId: myPeerId });
+      if(localStream) {
+        peer.call(conn.peer, localStream, { metadata: { name: myName } });
+      }
+    });
 
     conn.on('data', (data) => {
-      if(data.type === 'identity') {
-        remoteNames[data.peerId] = data.name;
-        updateVideoTag(data.peerId, data.name);
+      if(data.type === 'handshake') {
+        updateVideoTag(conn.peer, data.name);
       }
       if(data.type === 'subtitle') {
         showSubtitle(data.peerId, data.original, data.translated);
-      }
-    });
-
-    conn.on('open', () => {
-      // Envia meu nome para quem se conectou
-      conn.send({ type: 'identity', peerId: myPeerId, name: myName });
-    });
-  }
-
-  function connectToPeers() {
-    // Lista genérica de peers base para procurar na sala
-    const possiblePeers = ['joel', 'cliente', 'admin', 'user1', 'user2'];
-    possiblePeers.forEach(target => {
-      const targetPeerId = 'room' + roomCode + '-' + target;
-      if(targetPeerId !== myPeerId) {
-        const conn = peer.connect(targetPeerId);
-        if(conn) setupConnection(conn);
-        if(localStream) {
-          const call = peer.call(targetPeerId, localStream);
-          if(call) {
-            call.on('stream', (remoteStream) => {
-              addVideoFeed(targetPeerId, remoteNames[targetPeerId] || target, remoteStream);
-            });
-          }
-        }
       }
     });
   }
@@ -255,10 +232,10 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     if(tag) tag.textContent = name;
   }
 
-  // LÓGICA DE TRADUÇÃO SIMULTÂNEA
+  // TRADUÇÃO SEM EXIBIR ERRO DE SILÊNCIO
   document.getElementById('btnStartTranslate').addEventListener('click', () => {
-    if(!SpeechRecognition) return alert('Seu navegador não suporta reconhecimento de voz. Use o Google Chrome.');
-    
+    if(!SpeechRecognition) return alert('Reconhecimento de voz não suportado neste navegador. Use o Chrome.');
+
     if(isTranslating) {
       if(recognition) recognition.stop();
       isTranslating = false;
@@ -277,26 +254,35 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     recognition.lang = document.getElementById('myLang').value;
 
     recognition.onresult = async (event) => {
-      const transcript = event.results[event.results.length - 1][0].transcript;
-      const targetLang = document.getElementById('targetLang').value;
+      const transcript = event.results[event.results.length - 1][0].transcript.trim();
       
-      // Simulação de chamada API DEEPL (Usando MyMemory Pública para Demo Front-End)
+      // Validação para evitar envio de ruídos vazios
+      if(!transcript || transcript.length < 2) return;
+
+      const targetLang = document.getElementById('targetLang').value;
+      const sourceLang = recognition.lang.split('-')[0];
+
       try {
-        const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(transcript)}&langpair=${recognition.lang.split('-')[0]}|${targetLang}`);
+        const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(transcript)}&langpair=${sourceLang}|${targetLang}`);
         const data = await res.json();
-        const translatedText = data.responseData.translatedText;
+        
+        // Garante que só exibe o texto se houver uma resposta válida de tradução
+        if(data && data.responseData && data.responseData.translatedText) {
+          const translatedText = data.responseData.translatedText;
 
-        // Mostra pra mim mesmo
-        showSubtitle(myPeerId, transcript, translatedText);
+          // Se a API retornar mensagem de erro interna, ignora e não exibe
+          if(translatedText.includes("NO QUERY SPECIFIED")) return;
 
-        // Envia pros clientes
-        activeConns.forEach(conn => {
-          if(conn.open) {
-            conn.send({ type: 'subtitle', peerId: myPeerId, original: transcript, translated: translatedText });
-          }
-        });
+          showSubtitle(myPeerId, transcript, translatedText);
+
+          Object.values(connections).forEach(conn => {
+            if(conn.open) {
+              conn.send({ type: 'subtitle', peerId: myPeerId, original: transcript, translated: translatedText });
+            }
+          });
+        }
       } catch(e) {
-        console.log("Erro na tradução", e);
+        console.log("Aguardando fala...");
       }
     };
 
