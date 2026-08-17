@@ -201,6 +201,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
         <button class="tool-btn" id="btnToggleMic" style="display:none;">🎤 Mic</button>
         <button class="tool-btn" id="btnToggleCam" style="display:none;">📹 Câmera</button>
         <button class="tool-btn" id="btnScreenShare" style="display:none;">🖥️ Compartilhar tela</button>
+        <button class="tool-btn" id="btnEnableAudio" style="display:none;">🔊 Ativar áudio</button>
         <button class="tool-btn" id="btnWhiteboard">✏️ Lousa</button>
         </div>
     </div>
@@ -381,6 +382,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       document.getElementById('screen-home').classList.remove('active');
       document.getElementById('screen-room').classList.add('active');
       document.getElementById('chatFab').classList.add('show');
+      document.getElementById('btnEnableAudio').style.display = '';
       renderParticipantsList();
 
       if(!isHost){
@@ -470,7 +472,12 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     if(stageMode !== 'screenshare' || !presentingPeerId) return;
     const stream = presentingPeerId === myPeerId ? screenStream : peerStreams[presentingPeerId];
     const label = presentingPeerId === myPeerId ? 'Você está compartilhando a tela' : (peerNameFor(presentingPeerId) + ' está compartilhando a tela');
-    if(stream) document.getElementById('stageVideo').srcObject = stream;
+    if(stream){
+      const stageVideo = document.getElementById('stageVideo');
+      stageVideo.srcObject = stream;
+      stageVideo.muted = false;
+      stageVideo.play().catch(() => { document.getElementById('btnEnableAudio').style.display = ''; });
+    }
     document.getElementById('stageLabel').textContent = label;
   }
 
@@ -656,6 +663,8 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       document.getElementById('btnToggleMic').style.display = '';
       document.getElementById('btnToggleCam').style.display = '';
       document.getElementById('btnScreenShare').style.display = '';
+      document.getElementById('btnEnableAudio').style.display = '';
+      unlockRemoteAudio();
 
       // Recover connections that were answered before we had media (they'd
       // never receive our video/audio otherwise), and call anyone we have a
@@ -767,8 +776,15 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     card.id = 'vcard-' + id;
 
     const video = document.createElement('video');
-    video.autoplay = true; video.playsInline = true; video.muted = !!isMuted;
+    video.autoplay = true; video.playsInline = true; video.controls = false; video.muted = !!isMuted;
+    video.setAttribute('webkit-playsinline', 'true');
     video.srcObject = stream;
+    if(!isMuted){
+      video.addEventListener('loadedmetadata', () => {
+        video.muted = false;
+        video.play().catch(() => { document.getElementById('btnEnableAudio').style.display = ''; });
+      }, { once:true });
+    }
 
     const tag = document.createElement('div');
     tag.className = 'tag'; tag.id = 'tag-' + id;
@@ -806,8 +822,30 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     const card = document.getElementById('vcard-' + id);
     if(!card) return;
     const video = card.querySelector('video');
-    if(video) video.srcObject = stream;
+    if(video){
+      video.srcObject = stream;
+      if(id !== myPeerId){
+        video.muted = false;
+        video.play().catch(() => {
+          document.getElementById('btnEnableAudio').style.display = '';
+        });
+      }
+    }
   }
+
+  function unlockRemoteAudio(){
+    const remoteVideos = Array.from(document.querySelectorAll('.video-card video, #stageVideo'))
+      .filter(video => video.srcObject && video !== document.querySelector('#vcard-' + myPeerId + ' video'));
+    remoteVideos.forEach(video => { video.muted = false; video.play().catch(() => {}); });
+    document.getElementById('btnEnableAudio').textContent = '🔊 Áudio ativo';
+    document.getElementById('btnEnableAudio').classList.add('active');
+  }
+
+  document.getElementById('btnEnableAudio').addEventListener('click', unlockRemoteAudio);
+  document.addEventListener('touchstart', () => {
+    // Um toque do usuário também libera vídeos remotos no Android/iOS.
+    if(document.getElementById('screen-room').classList.contains('active')) unlockRemoteAudio();
+  }, { passive:true, once:false });
 
   function removeVideoFeed(id){
     const card = document.getElementById('vcard-' + id);
@@ -894,6 +932,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     document.getElementById('btnToggleMic').style.display = 'none';
     document.getElementById('btnToggleCam').style.display = 'none';
     document.getElementById('btnScreenShare').style.display = 'none';
+    document.getElementById('btnEnableAudio').style.display = 'none';
     for(const k in participants) delete participants[k];
     for(const k in activeConns) delete activeConns[k];
     for(const k in activeCalls) delete activeCalls[k];
