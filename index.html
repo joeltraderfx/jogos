@@ -77,11 +77,14 @@ h1 { font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.05em; text-align: 
   .video-caption .caption-name{ color:var(--gold-bright); font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; margin-bottom:3px; }
   .video-caption .caption-original{ color:#e6e2da; font-size:12px; line-height:1.25; }
   .video-caption .caption-translated{ color:var(--gold-bright); font-weight:700; font-size:16px; line-height:1.25; margin-top:3px; overflow-wrap:anywhere; }
+  
+  /* Fallback visível para celular */
   .mobile-caption-fallback{ display:none; margin:10px 0 0; padding:9px 11px; border-radius:9px; background:rgba(8,9,13,.94); border:1px solid var(--gold); text-align:center; }
-  .mobile-caption-fallback.show{ display:none; }
+  .mobile-caption-fallback.show{ display:block; }
   .mobile-caption-fallback .caption-name{ color:var(--gold-bright); font-size:10px; font-weight:700; text-transform:uppercase; }
   .mobile-caption-fallback .caption-original{ color:#e6e2da; font-size:12px; margin-top:3px; }
   .mobile-caption-fallback .caption-translated{ color:var(--gold-bright); font-weight:700; font-size:16px; margin-top:3px; }
+  
   .global-captions{ display:none; }
   .stage-captions{ position:absolute; left:12px; right:12px; bottom:12px; padding:10px 14px; border-radius:11px; background:rgba(8,9,13,.94); border:1px solid var(--gold); z-index:8; opacity:0; transform:translateY(10px); pointer-events:none; transition:opacity .2s, transform .2s; text-align:center; box-shadow:0 8px 24px rgba(0,0,0,.45); }
   .stage-captions.show{ opacity:1; transform:translateY(0); }
@@ -95,8 +98,6 @@ h1 { font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.05em; text-align: 
     .video-caption .caption-translated{ font-size:14px; }
     .stage-captions{ left:6px; right:6px; bottom:6px; padding:8px 10px; }
     .stage-captions .caption-translated{ font-size:15px; }
-    .mobile-caption-fallback{ display:none; }
-    .mobile-caption-fallback.show{ display:block; }
   }
 
 .translation-bar { background: var(--panel-2); padding: 12px; border-radius: 10px; border: 1px solid #3f7fd1; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: center; font-size: 14px; margin-top:10px; }
@@ -134,7 +135,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
 .chat-input-row input{ flex:1; background:var(--panel); border:1px solid var(--border); color:var(--cream); border-radius:20px; padding:9px 14px; font-size:13px;}
 .chat-input-row button{ background:var(--gold); border:none; color:#1a1200; border-radius:20px; padding:0 16px; font-weight:700; font-size:13px; cursor:pointer;}
 
-/* ---------- whiteboard (appears in place of the video grid, synced for everyone) ---------- */
+/* ---------- whiteboard ---------- */
 .wb-panel{ display:none; flex-direction:column; margin-top:10px; border-radius:10px; overflow:hidden; border:1.5px solid var(--border); }
 .wb-panel.show{ display:flex; }
 .wb-toolbar{ display:flex; gap:8px; align-items:center; padding:10px 12px; background:var(--panel-2); border-bottom:1px solid var(--border); flex-wrap:wrap; }
@@ -210,7 +211,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
         <button class="tool-btn" id="btnScreenShare" style="display:none;">🖥️ Compartilhar tela</button>
         <button class="tool-btn" id="btnEnableAudio" style="display:none;">🔊 Ativar áudio</button>
         <button class="tool-btn" id="btnWhiteboard">✏️ Lousa</button>
-        </div>
+      </div>
     </div>
 
     <div class="translation-bar">
@@ -333,17 +334,17 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
   let camEnabled = true;
   let isScreenSharing = false;
   let mediaStarted = false;
-  let stageMode = 'grid'; // 'grid' | 'whiteboard' | 'screenshare' — what the main area shows
-  let presentingPeerId = null; // who is currently screen-sharing (broadcast to everyone)
-  const peerStreams = {}; // peerId -> MediaStream, so the stage can grab any peer's video on demand
-  const remoteAudioElements = {}; // peerId -> audio element dedicated to mobile playback
+  let stageMode = 'grid'; 
+  let presentingPeerId = null;
+  const peerStreams = {}; 
+  const remoteAudioElements = {}; 
   const isMobileDevice = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
 
-  const participants = {};   // peerId -> { name, isHost, muted }
-  const activeConns = {};    // peerId -> DataConnection
-  const activeCalls = {};    // peerId -> MediaConnection
-  const myInitiatedConns = new Set(); // peerIds whose data connection we opened
-  let wbShapes = [];         // shared whiteboard shapes
+  const participants = {};   
+  const activeConns = {};    
+  const activeCalls = {};    
+  const myInitiatedConns = new Set(); 
+  let wbShapes = [];         
 
   const userNameInput = document.getElementById('userNameInput');
   const roomCodeInput = document.getElementById('roomCodeInput');
@@ -401,7 +402,6 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       renderParticipantsList();
 
       if(!isHost){
-        // Bootstrap: the only peer id a newcomer knows in advance is the host's.
         connectToPeer(hostPeerId, true);
       }
     });
@@ -410,7 +410,6 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       if(err.type === 'unavailable-id') {
         showToast('Essa sala já foi criada! Clique em "Entrar na Sala".');
       } else if(err.type === 'peer-unavailable') {
-        // A peer we tried to reach is gone — clean up quietly.
       } else {
         console.error('Peer error', err);
       }
@@ -423,26 +422,15 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     peer.on('call', (call) => {
       const streamToSend = isScreenSharing ? screenStream : localStream;
       call.answer(streamToSend || undefined);
-      if(!streamToSend) call._answeredEmpty = true; // no camera/mic yet — recover once media starts
+      if(!streamToSend) call._answeredEmpty = true;
       registerCall(call.peer, call);
     });
   }
 
-  /* ================= Mesh connection management =================
-     Every peer that ARRIVES only knows the fixed host id in advance.
-     The host keeps the authoritative participant roster and, whenever
-     someone joins, (a) sends them the full roster + whiteboard state,
-     and (b) broadcasts their arrival to everyone already connected.
-     Each peer then connects directly to every OTHER peer it learns
-     about, using a simple rule (lower peer id initiates) so exactly
-     one side opens the connection — this is what makes it a full
-     mesh instead of "everyone only sees the host".
-  ================================================================== */
-
   function connectToPeer(otherId, force){
     if(!otherId || otherId === myPeerId) return;
-    if(activeConns[otherId]) return; // already connected/connecting
-    if(!force && !(myPeerId < otherId)) return; // the other side is responsible for initiating
+    if(activeConns[otherId]) return;
+    if(!force && !(myPeerId < otherId)) return;
     const conn = peer.connect(otherId, { reliable: true });
     myInitiatedConns.add(otherId);
     setupConnection(conn);
@@ -469,13 +457,11 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     call.on('error', () => {});
   }
 
-  /* ---- unified "stage": grid vs whiteboard vs screen-share, shared for everyone ---- */
   function setStageMode(mode){
     stageMode = mode;
     videoGrid.style.display = mode === 'grid' ? '' : 'none';
     wbPanel.classList.toggle('show', mode === 'whiteboard');
     document.getElementById('stageScreenshare').classList.toggle('show', mode === 'screenshare');
-    // A legenda fica dentro do próprio espaço ativo (lousa ou tela).
     document.getElementById('wbCaptions')?.classList.remove('show');
     document.getElementById('screenCaptions')?.classList.remove('show');
     if(lastStageSubtitle){
@@ -508,9 +494,6 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       if(isHost){
         conn.send({ type: 'roster', participants: getRosterList(), wbShapes: wbShapes });
       }
-      // Only the side that opened this data connection also places the media
-      // call — the other side just answers. If both sides called each other
-      // we'd end up with two redundant peer connections for the same pair.
       if(myInitiatedConns.has(conn.peer)){
         callPeer(conn.peer);
       }
@@ -636,7 +619,6 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       case 'translate-state':
         updateTranslateBadge(fromId, !!data.active);
         break;
-
     }
   }
 
@@ -686,9 +668,6 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       document.getElementById('btnScreenShare').style.display = '';
       document.getElementById('btnEnableAudio').style.display = '';
 
-      // Recover connections that were answered before we had media (they'd
-      // never receive our video/audio otherwise), and call anyone we have a
-      // data connection with but no media call yet.
       Object.keys(activeConns).forEach(id => {
         const existing = activeCalls[id];
         if(existing && existing._answeredEmpty){
@@ -730,7 +709,6 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     updateMicIndicator(myPeerId, true);
   }
 
-  /* ---- screen sharing (swaps the outgoing video track on every call) ---- */
   document.getElementById('btnScreenShare').addEventListener('click', async () => {
     if(!isScreenSharing){
       if(presentingPeerId && presentingPeerId !== myPeerId){
@@ -747,7 +725,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       updateVideoFeedStream(myPeerId, screenStream);
       document.getElementById('btnScreenShare').textContent = '🛑 Parar compartilhamento';
       document.getElementById('btnScreenShare').classList.add('active');
-      screenTrack.onended = stopScreenShare; // user clicked the browser's own "Stop sharing"
+      screenTrack.onended = stopScreenShare;
 
       presentingPeerId = myPeerId;
       setStageMode('screenshare');
@@ -884,8 +862,6 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     document.getElementById('btnEnableAudio').style.display = '';
   }
 
-  // O áudio só é desbloqueado por uma ação explícita, evitando tentativas
-  // repetidas a cada toque na tela do celular.
   document.getElementById('btnEnableAudio').addEventListener('click', unlockRemoteAudio);
 
   function removeVideoFeed(id){
@@ -904,7 +880,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     if(el) el.style.display = muted ? '' : 'none';
   }
 
-  const translateActiveState = {}; // peerId -> bool, so badges survive tile re-creation
+  const translateActiveState = {}; 
   function updateTranslateBadge(id, active){
     translateActiveState[id] = active;
     const el = document.getElementById('translateon-' + id);
@@ -920,7 +896,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   }
 
-  /* ---- host tools: mute / kick ---- */
+  /* ---- host tools ---- */
   videoGrid.addEventListener('click', (e)=>{
     const muteBtn = e.target.closest('.mute-btn');
     const kickBtn = e.target.closest('.kick-btn');
@@ -1084,7 +1060,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
   let wbPreview = null;
   let wbOpenState = false;
   let wbSelectedId = null;
-  let wbDragOffset = null; // {dnx, dny} while dragging a selected shape
+  let wbDragOffset = null; 
   let wbShapeIdCounter = 0;
 
   function nextShapeId(){ return myPeerId + '_' + Date.now() + '_' + (wbShapeIdCounter++); }
@@ -1099,9 +1075,6 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     if(open){ sizeWhiteboardCanvas(); redrawWhiteboard(); } else { selectShape(null); }
     if(shouldBroadcast){ broadcastAll({ type: open ? 'wb-open' : 'wb-close' }); }
   }
-
-  // The whiteboard is a shared teaching tool: whoever opens or closes it
-  // switches the view for the whole room, like screen sharing does.
 
   document.getElementById('btnWhiteboard').addEventListener('click', ()=>{
     setWhiteboardOpen(!wbOpenState, true);
@@ -1168,7 +1141,6 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     if(s.tool === 'rect' || s.tool === 'circle'){
       return px >= Math.min(x1,x2)-pad && px <= Math.max(x1,x2)+pad && py >= Math.min(y1,y2)-pad && py <= Math.max(y1,y2)+pad;
     }
-    // lines / arrow / hline / vline / dline: distance from point to segment
     const distToSeg = distPointToSegment(px, py, x1, y1, x2, y2);
     return distToSeg <= pad;
   }
@@ -1249,8 +1221,6 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       if(text){
         const shape = { id: nextShapeId(), tool:'text', x1:p.nx, y1:p.ny, color: wbColor, text: text.slice(0,120), fontSize: 20, bold:false, underline:false };
         wbShapes.push(shape); redrawWhiteboard(); broadcastAll({ type:'draw', shape });
-        // Auto-select so it's easy to move/format right after creating it —
-        // this is also how overlapping text gets fixed: drag it apart.
         document.querySelector('.wb-toolbar [data-tool="select"]').click();
         selectShape(shape.id);
       }
@@ -1385,8 +1355,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     wbCtx.restore();
   }
 
-
-  /* ================= Speech recognition + translation (kept working) ================= */
+  /* ================= Speech recognition + translation (FIXED FOR MOBILE) ================= */
   document.getElementById('btnStartTranslate').addEventListener('click', () => {
     if(!SpeechRecognition) return showToast('Utilize o navegador Google Chrome no celular.');
 
@@ -1409,13 +1378,12 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     recognition = new SpeechRecognition();
     recognition.continuous = true;
     recognition.interimResults = false;
+    recognition.lang = document.getElementById('myLang').value;
+    recognition.maxAlternatives = 1;
+
     recognition.onstart = () => {
       document.getElementById('btnStartTranslate').classList.add('active');
     };
-    recognition.lang = document.getElementById('myLang').value;
-    // Chrome Android usa o prefixo webkitSpeechRecognition; manter o idioma
-    // explícito evita que o celular tente reconhecer no idioma padrão do sistema.
-    recognition.maxAlternatives = 1;
 
     recognition.onresult = async (event) => {
       let transcript;
@@ -1427,9 +1395,6 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       const targetLang = document.getElementById('targetLang').value;
       const sourceLang = recognition.lang.split('-')[0];
 
-      // Show the original line immediately so something is always visible,
-      // even if the translation call is slow or fails (common on flaky
-      // mobile connections).
       showSubtitle(myPeerId, transcript, 'traduzindo...');
       broadcastAll({ type: 'subtitle', peerId: myPeerId, original: transcript, translated: '(traduzindo...)' });
 
@@ -1458,7 +1423,6 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     };
 
     recognition.onerror = (e) => {
-      // 'no-speech' e 'aborted' são normais em pausas no celular.
       if(e.error === 'no-speech' || e.error === 'aborted') return;
       if(e.error === 'not-allowed' || e.error === 'service-not-allowed'){
         isTranslating = false;
@@ -1476,6 +1440,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
         if(isTranslating && recognition){ try{ recognition.start(); }catch(e){} }
       }, 250);
     };
+
     const startRecognition = () => {
       try{ recognition.start(); }
       catch(e){
@@ -1485,8 +1450,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
         showToast('Toque novamente em “Ativar Legendas” para liberar o microfone do celular.');
       }
     };
-    // Em alguns celulares, o reconhecimento só inicia depois que o microfone
-    // foi autorizado nesta mesma sessão. O pedido é feito após o toque do usuário.
+
     if(!localStream && navigator.mediaDevices && navigator.mediaDevices.getUserMedia){
       navigator.mediaDevices.getUserMedia({ audio:true }).then(stream => {
         localStream = stream;
@@ -1504,7 +1468,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
   });
 
   const captionTimers = {};
-  const lastSubtitles = {}; // preserva a legenda mesmo se o cartão de vídeo for recriado
+  const lastSubtitles = {}; 
   let lastStageSubtitle = null;
   function renderStageSubtitle(target, subtitle){
     if(!target || !subtitle) return;
@@ -1513,6 +1477,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     target.querySelector('.caption-translated').textContent = subtitle.translated;
     target.classList.toggle('show', (target.id === 'wbCaptions' && stageMode === 'whiteboard') || (target.id === 'screenCaptions' && stageMode === 'screenshare'));
   }
+  
   function showSubtitle(peerId, original, translated) {
     const name = peerId === myPeerId
       ? (myName + ' (Você)')
@@ -1539,8 +1504,6 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       captionTimers.__mobile = setTimeout(() => mobileFallback.classList.remove('show'), 6000);
     }
 
-    // A legenda é atualizada nas duas superfícies, mas somente a superfície
-    // atualmente aberta fica visível. Assim ela permanece dentro da lousa/tela.
     lastSubtitles[peerId] = { name, original, translated };
     lastStageSubtitle = lastSubtitles[peerId];
     ['wbCaptions','screenCaptions'].forEach(id => renderStageSubtitle(document.getElementById(id), lastStageSubtitle));
