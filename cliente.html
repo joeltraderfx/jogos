@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self' https:; script-src 'self' https://unpkg.com; connect-src 'self' https: wss:; media-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com;">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Administrador — Criar sala</title>
+<title>Cliente — Entrar na sala</title>
 <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;600;700&display=swap');
@@ -174,17 +174,13 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
 
   <section class="screen active" id="screen-home">
   <div class="card">
-    <div style="color:var(--gold-bright);font-size:12px;font-weight:700;letter-spacing:.08em;margin-bottom:8px;">ÁREA DO ADMINISTRADOR</div>
-    <h2 style="margin:0 0 8px;">Criar sala de reunião</h2>
-    <p style="color:var(--cream-dim);font-size:13px;line-height:1.5;">Crie uma sala e envie o link exclusivo para seus clientes.</p>
+    <div style="color:var(--gold-bright);font-size:12px;font-weight:700;letter-spacing:.08em;margin-bottom:8px;">ENTRADA DO CLIENTE</div>
+    <h2 style="margin:0 0 8px;">Entrar na reunião</h2>
+    <p style="color:var(--cream-dim);font-size:13px;line-height:1.5;">Digite somente seu nome. A sala foi identificada pelo link recebido.</p>
     <label style="font-size:13px;color:var(--cream-dim);">SEU NOME</label>
-    <input class="text-input" id="userNameInput" placeholder="Nome do administrador" maxlength="20">
-    <div class="btn-group"><button class="big-btn accent" id="btnCreate">Criar sala e gerar link</button></div>
-    <div id="inviteBox" style="display:none;margin-top:14px;padding:12px;border:1px solid var(--success);border-radius:8px;background:rgba(47,169,140,.08);">
-      <strong>Link do cliente</strong>
-      <input class="text-input" id="inviteLink" readonly style="margin-top:8px;font-size:12px;">
-      <button class="big-btn primary" id="copyInvite" style="margin-top:8px;min-width:100%;">Copiar link para enviar</button>
-    </div>
+    <input class="text-input" id="userNameInput" placeholder="Digite seu nome" maxlength="20">
+    <input id="roomCodeInput" type="hidden">
+    <div class="btn-group"><button class="big-btn primary" id="btnJoin">Entrar na sala</button></div>
   </div>
 </section>
 
@@ -364,25 +360,23 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
   }
 
   /* ================= Entry ================= */
-  document.getElementById('btnCreate').addEventListener('click', () => {
-    const code = Math.floor(1000 + Math.random() * 9000).toString();
-    const invite = new URL('cliente.html', window.location.href);
-    invite.searchParams.set('room', code);
-    document.getElementById('inviteLink').value = invite.toString();
-    document.getElementById('inviteBox').style.display = 'block';
+  /* A criação de sala não existe nesta página. */
+  if(document.getElementById('btnCreate')) document.getElementById('btnCreate').addEventListener('click', () => {
+    const code = roomCodeInput.value.trim() || Math.floor(1000 + Math.random() * 9000).toString();
     isHost = true;
     startRoom(code);
   });
 
-  /* Entrada de cliente não existe nesta página. */
-  if(document.getElementById('btnJoin')) document.getElementById('btnJoin').addEventListener('click', () => {
+  const inviteRoom = new URLSearchParams(window.location.search).get('room');
+  if(inviteRoom && /^\d{4}$/.test(inviteRoom)) document.getElementById('roomCodeInput').value = inviteRoom;
+
+  document.getElementById('btnJoin').addEventListener('click', () => {
     const code = roomCodeInput.value.trim();
+    if(code.length !== 4) return showToast('Link de convite inválido ou incompleto.');
     if(code.length !== 4) return showToast('Digite o código de 4 dígitos!');
     isHost = false;
     startRoom(code);
   });
-
-  document.getElementById('copyInvite')?.addEventListener('click', async () => { try { await navigator.clipboard.writeText(document.getElementById('inviteLink').value); showToast('Link copiado.'); } catch(e) { showToast('Selecione e copie o link manualmente.'); } });
 
   function startRoom(code) {
     myName = userNameInput.value.trim() || 'Usuário';
