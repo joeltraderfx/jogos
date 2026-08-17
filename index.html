@@ -664,7 +664,6 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       document.getElementById('btnToggleCam').style.display = '';
       document.getElementById('btnScreenShare').style.display = '';
       document.getElementById('btnEnableAudio').style.display = '';
-      unlockRemoteAudio();
 
       // Recover connections that were answered before we had media (they'd
       // never receive our video/audio otherwise), and call anyone we have a
@@ -839,13 +838,12 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     remoteVideos.forEach(video => { video.muted = false; video.play().catch(() => {}); });
     document.getElementById('btnEnableAudio').textContent = '🔊 Áudio ativo';
     document.getElementById('btnEnableAudio').classList.add('active');
+    document.getElementById('btnEnableAudio').style.display = '';
   }
 
+  // O áudio só é desbloqueado por uma ação explícita, evitando tentativas
+  // repetidas a cada toque na tela do celular.
   document.getElementById('btnEnableAudio').addEventListener('click', unlockRemoteAudio);
-  document.addEventListener('touchstart', () => {
-    // Um toque do usuário também libera vídeos remotos no Android/iOS.
-    if(document.getElementById('screen-room').classList.contains('active')) unlockRemoteAudio();
-  }, { passive:true, once:false });
 
   function removeVideoFeed(id){
     const card = document.getElementById('vcard-' + id);
