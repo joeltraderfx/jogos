@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Sala Interativa Bilingue</title>
+<title>Sala Interativa</title>
 <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;600;700&display=swap');
@@ -127,6 +127,16 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
 .wb-spacer{ flex:1; }
 .wb-canvas-wrap{ height:60vh; min-height:320px; position:relative; background:#f4f1ea; touch-action:none; }
 #wbCanvas{ position:absolute; inset:0; width:100%; height:100%; display:block; touch-action:none; }
+.wb-format-bar{ display:none; gap:6px; padding:8px 12px; background:var(--panel-3); border-bottom:1px solid var(--border); flex-wrap:wrap; }
+.wb-format-bar.show{ display:flex; }
+.wb-format-bar button{ background:var(--panel); border:1px solid var(--border); color:var(--cream); border-radius:8px; padding:6px 10px; font-size:13px; cursor:pointer; }
+.wb-format-bar button.active{ background:var(--gold); color:#1a1200; border-color:var(--gold); }
+.wb-format-bar button[data-fmt="delete"]{ margin-left:auto; color:var(--danger); border-color:var(--danger); }
+
+.stage-screenshare{ display:none; margin-top:10px; border-radius:10px; overflow:hidden; border:1.5px solid var(--border); background:#000; position:relative; }
+.stage-screenshare.show{ display:block; }
+.stage-screenshare video{ width:100%; max-height:70vh; display:block; background:#000; object-fit:contain; }
+.stage-screenshare .stage-label{ position:absolute; top:10px; left:10px; background:rgba(0,0,0,0.8); color:var(--gold-bright); padding:6px 12px; border-radius:6px; font-size:12.5px; font-weight:700; }
 
 .kicked-overlay{ position:fixed; inset:0; background:rgba(10,11,16,0.96); z-index:100; display:none; align-items:center; justify-content:center; flex-direction:column; gap:14px; text-align:center; padding:20px; }
 .kicked-overlay.show{ display:flex; }
@@ -180,6 +190,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
         <button class="tool-btn" id="btnToggleCam" style="display:none;">📹 Câmera</button>
         <button class="tool-btn" id="btnScreenShare" style="display:none;">🖥️ Compartilhar tela</button>
         <button class="tool-btn" id="btnWhiteboard">✏️ Lousa</button>
+        <button class="tool-btn" id="btnRequestCaptions" style="display:none;" title="Pede para todos ativarem a legenda">📢 Pedir legendas a todos</button>
       </div>
     </div>
 
@@ -208,12 +219,15 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
 
       <div class="wb-panel" id="wbPanel">
         <div class="wb-toolbar">
+          <button data-tool="select" title="Selecionar / mover" class="active">🖐️</button>
           <button data-tool="text" title="Texto">🔤</button>
           <button data-tool="hline" title="Linha horizontal">➖</button>
           <button data-tool="vline" title="Linha vertical">┃</button>
+          <button data-tool="dline" title="Linha diagonal">╲</button>
           <button data-tool="rect" title="Retângulo">▭</button>
           <button data-tool="circle" title="Círculo">◯</button>
           <button data-tool="arrow" title="Seta">➜</button>
+          <button data-tool="eraser" title="Apagar um item (toque nele)">🧹</button>
           <div class="wb-colors">
             <button class="wb-color selected" data-color="#111111" style="background:#111111"></button>
             <button class="wb-color" data-color="#2f6fed" style="background:#2f6fed"></button>
@@ -224,7 +238,19 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
           <button id="wbClear" title="Limpar tudo">🗑️</button>
           <button id="wbClose" title="Voltar para o vídeo">✕</button>
         </div>
+        <div class="wb-format-bar" id="wbFormatBar">
+          <button data-fmt="bold" title="Negrito"><b>B</b></button>
+          <button data-fmt="underline" title="Sublinhado"><u>U</u></button>
+          <button data-fmt="smaller" title="Diminuir">A-</button>
+          <button data-fmt="bigger" title="Aumentar">A+</button>
+          <button data-fmt="delete" title="Excluir este item">🗑️ Excluir item</button>
+        </div>
         <div class="wb-canvas-wrap"><canvas id="wbCanvas"></canvas></div>
+      </div>
+
+      <div class="stage-screenshare" id="stageScreenshare">
+        <video id="stageVideo" autoplay playsinline></video>
+        <div class="stage-label" id="stageLabel">Compartilhando tela</div>
       </div>
     </div>
   </section>
@@ -276,6 +302,9 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
   let camEnabled = true;
   let isScreenSharing = false;
   let mediaStarted = false;
+  let stageMode = 'grid'; // 'grid' | 'whiteboard' | 'screenshare' — what the main area shows
+  let presentingPeerId = null; // who is currently screen-sharing (broadcast to everyone)
+  const peerStreams = {}; // peerId -> MediaStream, so the stage can grab any peer's video on demand
 
   const participants = {};   // peerId -> { name, isHost, muted }
   const activeConns = {};    // peerId -> DataConnection
@@ -335,6 +364,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       document.getElementById('screen-home').classList.remove('active');
       document.getElementById('screen-room').classList.add('active');
       document.getElementById('chatFab').classList.add('show');
+      if(isHost) document.getElementById('btnRequestCaptions').style.display = '';
       renderParticipantsList();
 
       if(!isHost){
@@ -397,10 +427,32 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     activeCalls[otherId] = call;
     call.on('stream', (remoteStream) => {
       const name = (participants[otherId] && participants[otherId].name) || 'Participante';
+      peerStreams[otherId] = remoteStream;
       addVideoFeed(otherId, name, remoteStream);
+      if(otherId === presentingPeerId) applyStageStreamIfAvailable();
     });
-    call.on('close', () => { delete activeCalls[otherId]; removeVideoFeed(otherId); });
+    call.on('close', () => { delete activeCalls[otherId]; delete peerStreams[otherId]; removeVideoFeed(otherId); });
     call.on('error', () => {});
+  }
+
+  /* ---- unified "stage": grid vs whiteboard vs screen-share, shared for everyone ---- */
+  function setStageMode(mode){
+    stageMode = mode;
+    videoGrid.style.display = mode === 'grid' ? '' : 'none';
+    wbPanel.classList.toggle('show', mode === 'whiteboard');
+    document.getElementById('stageScreenshare').classList.toggle('show', mode === 'screenshare');
+  }
+
+  function applyStageStreamIfAvailable(){
+    if(stageMode !== 'screenshare' || !presentingPeerId) return;
+    const stream = presentingPeerId === myPeerId ? screenStream : peerStreams[presentingPeerId];
+    const label = presentingPeerId === myPeerId ? 'Você está compartilhando a tela' : (peerNameFor(presentingPeerId) + ' está compartilhando a tela');
+    if(stream) document.getElementById('stageVideo').srcObject = stream;
+    document.getElementById('stageLabel').textContent = label;
+  }
+
+  function peerNameFor(id){
+    return (participants[id] && participants[id].name) || 'Alguém';
   }
 
   function setupConnection(conn){
@@ -495,8 +547,22 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
         redrawWhiteboard();
         break;
 
+      case 'draw-update': {
+        const idx = wbShapes.findIndex(s=>s.id===data.shape.id);
+        if(idx>=0) wbShapes[idx] = data.shape; else wbShapes.push(data.shape);
+        redrawWhiteboard();
+        break;
+      }
+
+      case 'draw-delete':
+        wbShapes = wbShapes.filter(s=>s.id!==data.id);
+        if(wbSelectedId === data.id) selectShape(null);
+        redrawWhiteboard();
+        break;
+
       case 'draw-clear':
         wbShapes = [];
+        selectShape(null);
         redrawWhiteboard();
         break;
 
@@ -508,8 +574,30 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
         setWhiteboardOpen(false, false);
         break;
 
+      case 'screen-share-start':
+        presentingPeerId = data.peerId;
+        setStageMode('screenshare', false);
+        applyStageStreamIfAvailable();
+        break;
+
+      case 'screen-share-stop':
+        if(presentingPeerId === data.peerId){
+          presentingPeerId = null;
+          if(stageMode === 'screenshare') setStageMode('grid', false);
+        }
+        break;
+
       case 'translate-state':
         updateTranslateBadge(fromId, !!data.active);
+        break;
+
+      case 'request-captions':
+        showToast('O anfitrião pediu para você ativar as legendas.');
+        if(!isTranslating){
+          const btn = document.getElementById('btnStartTranslate');
+          btn.style.boxShadow = '0 0 0 3px var(--gold-bright)';
+          setTimeout(()=>{ btn.style.boxShadow = ''; }, 4000);
+        }
         break;
     }
   }
@@ -530,6 +618,11 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     myInitiatedConns.delete(peerId);
     delete participants[peerId];
     delete translateActiveState[peerId];
+    delete peerStreams[peerId];
+    if(presentingPeerId === peerId){
+      presentingPeerId = null;
+      if(stageMode === 'screenshare') setStageMode('grid');
+    }
     removeVideoFeed(peerId);
     renderParticipantsList();
     if(isHost && !viaBroadcast){
@@ -595,6 +688,11 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
   /* ---- screen sharing (swaps the outgoing video track on every call) ---- */
   document.getElementById('btnScreenShare').addEventListener('click', async () => {
     if(!isScreenSharing){
+      if(presentingPeerId && presentingPeerId !== myPeerId){
+        showToast(peerNameFor(presentingPeerId) + ' já está compartilhando a tela.');
+        return;
+      }
+      if(wbOpenState) setWhiteboardOpen(false, true);
       try{
         screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
       }catch(e){ return; }
@@ -605,6 +703,11 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       document.getElementById('btnScreenShare').textContent = '🛑 Parar compartilhamento';
       document.getElementById('btnScreenShare').classList.add('active');
       screenTrack.onended = stopScreenShare; // user clicked the browser's own "Stop sharing"
+
+      presentingPeerId = myPeerId;
+      setStageMode('screenshare');
+      applyStageStreamIfAvailable();
+      broadcastAll({ type: 'screen-share-start', peerId: myPeerId });
     } else {
       stopScreenShare();
     }
@@ -621,6 +724,12 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     }
     document.getElementById('btnScreenShare').textContent = '🖥️ Compartilhar tela';
     document.getElementById('btnScreenShare').classList.remove('active');
+
+    if(presentingPeerId === myPeerId){
+      presentingPeerId = null;
+      if(stageMode === 'screenshare') setStageMode('grid');
+      broadcastAll({ type: 'screen-share-stop', peerId: myPeerId });
+    }
   }
 
   function replaceOutgoingVideoTrack(newTrack){
@@ -740,7 +849,16 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     videoGrid.innerHTML = '';
     videoGrid.style.display = '';
     document.getElementById('wbPanel').classList.remove('show');
+    document.getElementById('stageScreenshare').classList.remove('show');
+    document.getElementById('stageVideo').srcObject = null;
+    stageMode = 'grid';
+    presentingPeerId = null;
+    isScreenSharing = false;
     wbOpenState = false;
+    wbSelectedId = null;
+    wbShapeIdCounter = 0;
+    document.getElementById('btnScreenShare').textContent = '🖥️ Compartilhar tela';
+    document.getElementById('btnScreenShare').classList.remove('active');
     document.getElementById('screen-room').classList.remove('active');
     document.getElementById('screen-home').classList.add('active');
     document.getElementById('chatFab').classList.remove('show');
@@ -748,9 +866,11 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     document.getElementById('btnToggleMic').style.display = 'none';
     document.getElementById('btnToggleCam').style.display = 'none';
     document.getElementById('btnScreenShare').style.display = 'none';
+    document.getElementById('btnRequestCaptions').style.display = 'none';
     for(const k in participants) delete participants[k];
     for(const k in activeConns) delete activeConns[k];
     for(const k in activeCalls) delete activeCalls[k];
+    for(const k in peerStreams) delete peerStreams[k];
     myInitiatedConns.clear();
     for(const k in translateActiveState) delete translateActiveState[k];
     isTranslating = false;
@@ -845,32 +965,44 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
   const wbPanel = document.getElementById('wbPanel');
   const wbCanvas = document.getElementById('wbCanvas');
   const wbCtx = wbCanvas.getContext('2d');
-  let wbTool = 'rect';
+  const wbFormatBar = document.getElementById('wbFormatBar');
+  let wbTool = 'select';
   let wbColor = '#111111';
   let wbDrawing = false;
   let wbStart = null;
   let wbPreview = null;
   let wbOpenState = false;
+  let wbSelectedId = null;
+  let wbDragOffset = null; // {dnx, dny} while dragging a selected shape
+  let wbShapeIdCounter = 0;
+
+  function nextShapeId(){ return myPeerId + '_' + Date.now() + '_' + (wbShapeIdCounter++); }
 
   function setWhiteboardOpen(open, shouldBroadcast){
+    if(open && isScreenSharing) stopScreenShare();
     wbOpenState = open;
-    videoGrid.style.display = open ? 'none' : '';
-    wbPanel.classList.toggle('show', open);
+    if(open) setStageMode('whiteboard', false); else if(stageMode==='whiteboard') setStageMode('grid', false);
     const btn = document.getElementById('btnWhiteboard');
     btn.textContent = open ? '📹 Voltar para o vídeo' : '✏️ Lousa';
     btn.classList.toggle('active', open);
-    if(open){ sizeWhiteboardCanvas(); redrawWhiteboard(); }
+    if(open){ sizeWhiteboardCanvas(); redrawWhiteboard(); } else { selectShape(null); }
     if(shouldBroadcast){ broadcastAll({ type: open ? 'wb-open' : 'wb-close' }); }
   }
 
   // The whiteboard is a shared teaching tool: whoever opens or closes it
   // switches the view for the whole room, like screen sharing does.
+  document.getElementById('btnRequestCaptions').addEventListener('click', ()=>{
+    broadcastAll({ type: 'request-captions' });
+    showToast('Pedido enviado — cada pessoa ainda precisa tocar em "Ativar Legendas" no próprio aparelho.');
+  });
+
   document.getElementById('btnWhiteboard').addEventListener('click', ()=>{
     setWhiteboardOpen(!wbOpenState, true);
   });
   document.getElementById('wbClose').addEventListener('click', ()=> setWhiteboardOpen(false, true));
   document.getElementById('wbClear').addEventListener('click', ()=>{
     wbShapes = [];
+    selectShape(null);
     redrawWhiteboard();
     broadcastAll({ type: 'draw-clear' });
   });
@@ -880,6 +1012,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       wbTool = btn.dataset.tool;
       document.querySelectorAll('.wb-toolbar [data-tool]').forEach(b=>b.classList.remove('active'));
       btn.classList.add('active');
+      if(wbTool !== 'select') selectShape(null);
     });
   });
   document.querySelectorAll('.wb-color').forEach(sw=>{
@@ -887,9 +1020,9 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       wbColor = sw.dataset.color;
       document.querySelectorAll('.wb-color').forEach(s=>s.classList.remove('selected'));
       sw.classList.add('selected');
+      if(wbSelectedId){ updateSelectedShape({ color: wbColor }); }
     });
   });
-  document.querySelector('.wb-toolbar [data-tool="rect"]').classList.add('active');
 
   window.addEventListener('resize', ()=>{ if(wbOpenState){ sizeWhiteboardCanvas(); redrawWhiteboard(); } });
 
@@ -907,30 +1040,154 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     return { nx: (pt.clientX - rect.left) / rect.width, ny: (pt.clientY - rect.top) / rect.height };
   }
 
+  function findShapeAt(nx, ny){
+    const rect = wbCanvas.getBoundingClientRect();
+    const px = nx*rect.width, py = ny*rect.height;
+    for(let i = wbShapes.length - 1; i >= 0; i--){
+      if(shapeHitTest(wbShapes[i], px, py, rect)) return wbShapes[i];
+    }
+    return null;
+  }
+
+  function shapeHitTest(s, px, py, rect){
+    const x1 = s.x1*rect.width, y1 = s.y1*rect.height;
+    const x2 = (s.x2!==undefined ? s.x2 : s.x1)*rect.width, y2 = (s.y2!==undefined ? s.y2 : s.y1)*rect.height;
+    const pad = 10;
+    if(s.tool === 'text'){
+      const fontSize = s.fontSize || 20;
+      const w = (s.text ? s.text.length : 1) * fontSize * 0.56;
+      return px >= x1-4 && px <= x1+w+4 && py >= y1-fontSize-4 && py <= y1+8;
+    }
+    if(s.tool === 'rect' || s.tool === 'circle'){
+      return px >= Math.min(x1,x2)-pad && px <= Math.max(x1,x2)+pad && py >= Math.min(y1,y2)-pad && py <= Math.max(y1,y2)+pad;
+    }
+    // lines / arrow / hline / vline / dline: distance from point to segment
+    const distToSeg = distPointToSegment(px, py, x1, y1, x2, y2);
+    return distToSeg <= pad;
+  }
+
+  function distPointToSegment(px, py, x1, y1, x2, y2){
+    const dx = x2-x1, dy = y2-y1;
+    const lenSq = dx*dx + dy*dy;
+    let t = lenSq === 0 ? 0 : ((px-x1)*dx + (py-y1)*dy) / lenSq;
+    t = Math.max(0, Math.min(1, t));
+    const cx = x1 + t*dx, cy = y1 + t*dy;
+    return Math.hypot(px-cx, py-cy);
+  }
+
+  function selectShape(id){
+    wbSelectedId = id;
+    const shape = id ? wbShapes.find(s=>s.id===id) : null;
+    wbFormatBar.classList.toggle('show', !!shape);
+    if(shape){
+      wbFormatBar.querySelector('[data-fmt="bold"]').classList.toggle('active', !!shape.bold);
+      wbFormatBar.querySelector('[data-fmt="underline"]').classList.toggle('active', !!shape.underline);
+    }
+    redrawWhiteboard();
+  }
+
+  function updateSelectedShape(patch){
+    const shape = wbShapes.find(s=>s.id===wbSelectedId);
+    if(!shape) return;
+    Object.assign(shape, patch);
+    redrawWhiteboard();
+    broadcastAll({ type: 'draw-update', shape });
+  }
+
+  wbFormatBar.addEventListener('click', (e)=>{
+    const btn = e.target.closest('[data-fmt]');
+    if(!btn || !wbSelectedId) return;
+    const shape = wbShapes.find(s=>s.id===wbSelectedId);
+    if(!shape) return;
+    const fmt = btn.dataset.fmt;
+    if(fmt === 'bold'){ updateSelectedShape({ bold: !shape.bold }); btn.classList.toggle('active'); }
+    else if(fmt === 'underline'){ updateSelectedShape({ underline: !shape.underline }); btn.classList.toggle('active'); }
+    else if(fmt === 'bigger'){ updateSelectedShape({ fontSize: Math.min(64, (shape.fontSize||20)+4) }); }
+    else if(fmt === 'smaller'){ updateSelectedShape({ fontSize: Math.max(10, (shape.fontSize||20)-4) }); }
+    else if(fmt === 'delete'){
+      wbShapes = wbShapes.filter(s=>s.id!==wbSelectedId);
+      broadcastAll({ type:'draw-delete', id: wbSelectedId });
+      selectShape(null);
+    }
+  });
+
   function wbPointerDown(e){
     e.preventDefault();
     const p = wbPos(e);
-    if(wbTool === 'text'){
-      const text = prompt('Digite o texto:');
-      if(text){
-        const shape = { tool:'text', x1:p.nx, y1:p.ny, color: wbColor, text: text.slice(0,120) };
-        wbShapes.push(shape); redrawWhiteboard(); broadcastAll({ type:'draw', shape });
+
+    if(wbTool === 'select'){
+      const hit = findShapeAt(p.nx, p.ny);
+      if(hit){
+        selectShape(hit.id);
+        wbDragOffset = { dnx: p.nx - hit.x1, dny: p.ny - hit.y1, x2offset: hit.x2!==undefined ? hit.x2-hit.x1 : null, y2offset: hit.y2!==undefined ? hit.y2-hit.y1 : null };
+        wbDrawing = true;
+      } else {
+        selectShape(null);
       }
       return;
     }
+
+    if(wbTool === 'eraser'){
+      const hit = findShapeAt(p.nx, p.ny);
+      if(hit){
+        wbShapes = wbShapes.filter(s=>s.id!==hit.id);
+        redrawWhiteboard();
+        broadcastAll({ type:'draw-delete', id: hit.id });
+      }
+      return;
+    }
+
+    if(wbTool === 'text'){
+      const text = prompt('Digite o texto:');
+      if(text){
+        const shape = { id: nextShapeId(), tool:'text', x1:p.nx, y1:p.ny, color: wbColor, text: text.slice(0,120), fontSize: 20, bold:false, underline:false };
+        wbShapes.push(shape); redrawWhiteboard(); broadcastAll({ type:'draw', shape });
+        // Auto-select so it's easy to move/format right after creating it —
+        // this is also how overlapping text gets fixed: drag it apart.
+        document.querySelector('.wb-toolbar [data-tool="select"]').click();
+        selectShape(shape.id);
+      }
+      return;
+    }
+
     wbDrawing = true;
     wbStart = p;
   }
+
   function wbPointerMove(e){
     if(!wbDrawing) return;
     e.preventDefault();
     const p = wbPos(e);
+
+    if(wbTool === 'select' && wbSelectedId && wbDragOffset){
+      const shape = wbShapes.find(s=>s.id===wbSelectedId);
+      if(shape){
+        shape.x1 = p.nx - wbDragOffset.dnx;
+        shape.y1 = p.ny - wbDragOffset.dny;
+        if(wbDragOffset.x2offset !== null) shape.x2 = shape.x1 + wbDragOffset.x2offset;
+        if(wbDragOffset.y2offset !== null) shape.y2 = shape.y1 + wbDragOffset.y2offset;
+        redrawWhiteboard();
+      }
+      return;
+    }
+
     wbPreview = buildShape(wbStart, p);
     redrawWhiteboard();
   }
+
   function wbPointerUp(e){
     if(!wbDrawing) return;
     wbDrawing = false;
+
+    if(wbTool === 'select'){
+      if(wbSelectedId){
+        const shape = wbShapes.find(s=>s.id===wbSelectedId);
+        if(shape) broadcastAll({ type:'draw-update', shape });
+      }
+      wbDragOffset = null;
+      return;
+    }
+
     const p = wbPos(e);
     const shape = buildShape(wbStart, p);
     wbPreview = null;
@@ -946,7 +1203,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     let x2 = end.nx, y2 = end.ny;
     if(wbTool === 'hline') y2 = start.ny;
     if(wbTool === 'vline') x2 = start.nx;
-    return { tool: wbTool, x1: start.nx, y1: start.ny, x2, y2, color: wbColor };
+    return { id: nextShapeId(), tool: wbTool, x1: start.nx, y1: start.ny, x2, y2, color: wbColor };
   }
 
   wbCanvas.addEventListener('mousedown', wbPointerDown);
@@ -961,31 +1218,40 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     wbCtx.clearRect(0,0,rect.width, rect.height);
     wbCtx.fillStyle = '#f4f1ea';
     wbCtx.fillRect(0,0,rect.width, rect.height);
-    wbShapes.forEach(s => drawShape(s, rect));
-    if(wbPreview) drawShape(wbPreview, rect);
+    wbShapes.forEach(s => drawShape(s, rect, s.id === wbSelectedId));
+    if(wbPreview) drawShape(wbPreview, rect, false);
   }
 
-  function drawShape(s, rect){
+  function drawShape(s, rect, selected){
     const x1 = s.x1*rect.width, y1 = s.y1*rect.height;
     const x2 = (s.x2!==undefined ? s.x2 : s.x1)*rect.width, y2 = (s.y2!==undefined ? s.y2 : s.y1)*rect.height;
     wbCtx.strokeStyle = s.color; wbCtx.fillStyle = s.color; wbCtx.lineWidth = 3; wbCtx.lineCap = 'round';
 
     if(s.tool === 'text'){
-      wbCtx.font = '20px Inter, sans-serif';
+      const fontSize = s.fontSize || 20;
+      wbCtx.font = (s.bold ? 'bold ' : '') + fontSize + 'px Inter, sans-serif';
       wbCtx.fillText(s.text, x1, y1);
+      if(s.underline){
+        const w = wbCtx.measureText(s.text).width;
+        wbCtx.beginPath(); wbCtx.moveTo(x1, y1+3); wbCtx.lineTo(x1+w, y1+3); wbCtx.lineWidth = 2; wbCtx.stroke();
+      }
+      if(selected) drawSelectionBox(x1-4, y1-fontSize-2, (s.text?s.text.length:1)*fontSize*0.56+8, fontSize+10);
       return;
     }
     if(s.tool === 'rect'){
       wbCtx.strokeRect(Math.min(x1,x2), Math.min(y1,y2), Math.abs(x2-x1), Math.abs(y2-y1));
+      if(selected) drawSelectionBox(Math.min(x1,x2)-6, Math.min(y1,y2)-6, Math.abs(x2-x1)+12, Math.abs(y2-y1)+12);
       return;
     }
     if(s.tool === 'circle'){
       const cx = (x1+x2)/2, cy = (y1+y2)/2, rx = Math.abs(x2-x1)/2, ry = Math.abs(y2-y1)/2;
       wbCtx.beginPath(); wbCtx.ellipse(cx, cy, Math.max(rx,1), Math.max(ry,1), 0, 0, Math.PI*2); wbCtx.stroke();
+      if(selected) drawSelectionBox(Math.min(x1,x2)-6, Math.min(y1,y2)-6, Math.abs(x2-x1)+12, Math.abs(y2-y1)+12);
       return;
     }
-    if(s.tool === 'hline' || s.tool === 'vline'){
+    if(s.tool === 'hline' || s.tool === 'vline' || s.tool === 'dline'){
       wbCtx.beginPath(); wbCtx.moveTo(x1,y1); wbCtx.lineTo(x2,y2); wbCtx.stroke();
+      if(selected) drawSelectionBox(Math.min(x1,x2)-6, Math.min(y1,y2)-6, Math.abs(x2-x1)+12, Math.abs(y2-y1)+12);
       return;
     }
     if(s.tool === 'arrow'){
@@ -998,9 +1264,20 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       wbCtx.moveTo(x2, y2);
       wbCtx.lineTo(x2 - headLen*Math.cos(angle + Math.PI/6), y2 - headLen*Math.sin(angle + Math.PI/6));
       wbCtx.stroke();
+      if(selected) drawSelectionBox(Math.min(x1,x2)-6, Math.min(y1,y2)-6, Math.abs(x2-x1)+12, Math.abs(y2-y1)+12);
       return;
     }
   }
+
+  function drawSelectionBox(x, y, w, h){
+    wbCtx.save();
+    wbCtx.strokeStyle = '#e8b84b';
+    wbCtx.lineWidth = 1.5;
+    wbCtx.setLineDash([5,4]);
+    wbCtx.strokeRect(x, y, w, h);
+    wbCtx.restore();
+  }
+
 
   /* ================= Speech recognition + translation (kept working) ================= */
   document.getElementById('btnStartTranslate').addEventListener('click', () => {
