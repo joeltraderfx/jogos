@@ -337,6 +337,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
   let presentingPeerId = null; // who is currently screen-sharing (broadcast to everyone)
   const peerStreams = {}; // peerId -> MediaStream, so the stage can grab any peer's video on demand
   const remoteAudioElements = {}; // peerId -> audio element dedicated to mobile playback
+  const isMobileDevice = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
 
   const participants = {};   // peerId -> { name, isHost, muted }
   const activeConns = {};    // peerId -> DataConnection
@@ -490,7 +491,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     if(stream){
       const stageVideo = document.getElementById('stageVideo');
       stageVideo.srcObject = stream;
-      stageVideo.muted = true;
+      stageVideo.muted = isMobileDevice;
       stageVideo.play().catch(() => {});
     }
     document.getElementById('stageLabel').textContent = label;
@@ -795,13 +796,13 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     card.id = 'vcard-' + id;
 
     const video = document.createElement('video');
-    video.autoplay = true; video.playsInline = true; video.controls = false; video.muted = true;
+    video.autoplay = true; video.playsInline = true; video.controls = false; video.muted = isMobileDevice ? true : !!isMuted;
     video.setAttribute('webkit-playsinline', 'true');
     video.srcObject = stream;
-    if(!isMuted){
+    if(!isMuted && !isMobileDevice){
       video.addEventListener('loadedmetadata', () => {
         video.muted = false;
-        video.play().catch(() => { document.getElementById('btnEnableAudio').style.display = ''; });
+        video.play().catch(() => {});
       }, { once:true });
     }
 
@@ -844,9 +845,9 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     if(video){
       video.srcObject = stream;
       if(id !== myPeerId){
-        video.muted = false;
+        video.muted = isMobileDevice;
         video.play().catch(() => {
-          document.getElementById('btnEnableAudio').style.display = '';
+          if(isMobileDevice) document.getElementById('btnEnableAudio').style.display = '';
         });
       }
     }
@@ -876,7 +877,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       audio.volume = 1;
       audio.play().catch(() => {});
     });
-    document.getElementById('stageVideo').muted = true;
+    document.getElementById('stageVideo').muted = isMobileDevice;
     document.getElementById('stageVideo').play().catch(() => {});
     document.getElementById('btnEnableAudio').textContent = '🔊 Áudio ativo';
     document.getElementById('btnEnableAudio').classList.add('active');
