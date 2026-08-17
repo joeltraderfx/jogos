@@ -633,6 +633,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     myInitiatedConns.delete(peerId);
     delete participants[peerId];
     delete translateActiveState[peerId];
+    delete lastSubtitles[peerId];
     delete peerStreams[peerId];
     if(presentingPeerId === peerId){
       presentingPeerId = null;
@@ -791,6 +792,13 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
 
     videoGrid.appendChild(card);
     if(translateActiveState[id]) updateTranslateBadge(id, true);
+    if(lastSubtitles[id]){
+      const saved = lastSubtitles[id];
+      caption.querySelector('.caption-name').textContent = saved.name;
+      caption.querySelector('.caption-original').textContent = saved.original;
+      caption.querySelector('.caption-translated').textContent = saved.translated;
+      caption.classList.add('show');
+    }
     updateParticipantCount();
   }
 
@@ -892,6 +900,8 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     for(const k in peerStreams) delete peerStreams[k];
     myInitiatedConns.clear();
     for(const k in translateActiveState) delete translateActiveState[k];
+    for(const k in lastSubtitles) delete lastSubtitles[k];
+    lastStageSubtitle = null;
     isTranslating = false;
     if(recognition){ try{ recognition.stop(); }catch(e){} recognition = null; }
     document.getElementById('btnStartTranslate').textContent = "Ativar Legendas";
@@ -1380,15 +1390,35 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
         if(isTranslating && recognition){ try{ recognition.start(); }catch(e){} }
       }, 250);
     };
-    try{ recognition.start(); }catch(e){
-      isTranslating = false;
-      document.getElementById('btnStartTranslate').textContent = 'Ativar Legendas';
-      document.getElementById('btnStartTranslate').style.background = 'var(--success)';
-      showToast('Toque novamente em “Ativar Legendas” para liberar o microfone do celular.');
+    const startRecognition = () => {
+      try{ recognition.start(); }
+      catch(e){
+        isTranslating = false;
+        document.getElementById('btnStartTranslate').textContent = 'Ativar Legendas';
+        document.getElementById('btnStartTranslate').style.background = 'var(--success)';
+        showToast('Toque novamente em “Ativar Legendas” para liberar o microfone do celular.');
+      }
+    };
+    // Em alguns celulares, o reconhecimento só inicia depois que o microfone
+    // foi autorizado nesta mesma sessão. O pedido é feito após o toque do usuário.
+    if(!localStream && navigator.mediaDevices && navigator.mediaDevices.getUserMedia){
+      navigator.mediaDevices.getUserMedia({ audio:true }).then(stream => {
+        localStream = stream;
+        mediaStarted = true;
+        startRecognition();
+      }).catch(() => {
+        isTranslating = false;
+        document.getElementById('btnStartTranslate').textContent = 'Ativar Legendas';
+        document.getElementById('btnStartTranslate').style.background = 'var(--success)';
+        showToast('Permita o microfone nas configurações do navegador do celular.');
+      });
+    } else {
+      startRecognition();
     }
   });
 
   const captionTimers = {};
+  const lastSubtitles = {}; // preserva a legenda mesmo se o cartão de vídeo for recriado
   let lastStageSubtitle = null;
   function renderStageSubtitle(target, subtitle){
     if(!target || !subtitle) return;
@@ -1413,7 +1443,8 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
 
     // A legenda é atualizada nas duas superfícies, mas somente a superfície
     // atualmente aberta fica visível. Assim ela permanece dentro da lousa/tela.
-    lastStageSubtitle = { name, original, translated };
+    lastSubtitles[peerId] = { name, original, translated };
+    lastStageSubtitle = lastSubtitles[peerId];
     ['wbCaptions','screenCaptions'].forEach(id => renderStageSubtitle(document.getElementById(id), lastStageSubtitle));
     clearTimeout(captionTimers.__stage);
     captionTimers.__stage = setTimeout(() => {
