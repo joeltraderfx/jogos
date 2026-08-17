@@ -57,6 +57,25 @@ app.put('/kv/:key', (req, res) => {
   res.json({ ok: true });
 });
 
+app.get('/api/rooms/:code', (req, res) => {
+  const code = String(req.params.code || '');
+  res.json({ deleted: deletedRooms.has(code) });
+});
+
+app.delete('/api/rooms/:code', (req, res) => {
+  const code = String(req.params.code || '');
+  deletedRooms.add(code);
+  const peers = rooms.get(code);
+  if(peers){
+    for(const ws of peers.values()){
+      try{ ws.send(JSON.stringify({ type:'room-deleted' })); }catch(e){}
+      try{ ws.close(4001, 'room deleted'); }catch(e){}
+    }
+    rooms.delete(code);
+  }
+  res.json({ ok:true, deleted:true });
+});
+
 app.get('/health', (req, res) => res.send('ok'));
 
 const server = app.listen(PORT, () => {
@@ -69,12 +88,13 @@ const server = app.listen(PORT, () => {
 // devices (peer-to-peer), never through this server.
 const wss = new WebSocketServer({ server, path: '/signal' });
 const rooms = new Map(); // roomCode -> Map(playerId -> ws)
+const deletedRooms = new Set();
 
 wss.on('connection', (ws, req) => {
   const url = new URL(req.url, 'http://localhost');
   const room = url.searchParams.get('room');
   const id = url.searchParams.get('id');
-  if (!room || !id) { ws.close(); return; }
+  if (!room || !id || deletedRooms.has(room)) { ws.close(4001, 'room deleted'); return; }
 
   if (!rooms.has(room)) rooms.set(room, new Map());
   rooms.get(room).set(id, ws);

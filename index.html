@@ -196,7 +196,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       <div class="top-bar">
         <div class="room-code-pill"><span style="font-size:11px;color:var(--cream-dim);">SALA</span><span class="code" id="lblRoomCode">----</span></div>
         <div class="participant-count" id="participantCountBtn">👥 <b id="participantCountNum">1</b> conectado(s)</div>
-        <button class="leave-btn" id="btnLeave">Sair</button>
+        <button class="leave-btn danger-state" id="btnDeleteRoom">Excluir sala</button><button class="leave-btn" id="btnLeave">Sair</button>
       </div>
 
       <div class="toolbar">
@@ -328,6 +328,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
   let myPeerId = '';
   let hostPeerId = '';
   let roomPassword = '';
+  let roomDeleted = false;
   let isHost = false;
   const authorizedPeers = new Set();
   let micEnabled = true;
@@ -435,7 +436,14 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
   if(isAdmin){ ['featureAudio','featureVideo','featureChat','featureTranslation','featureScreenShare','featureWhiteboard'].forEach(id => document.getElementById(id)?.addEventListener('change', updateFeatureConfig)); }
   if(!isAdmin){ const inviteRoom = new URLSearchParams(window.location.search).get('room'); if(inviteRoom && /^\d{4}$/.test(inviteRoom)) document.getElementById('roomCodeInput').value = inviteRoom; }
 
-  function startRoom(code) {
+  async function startRoom(code) {
+    if(!isHost){
+      try{
+        const status = await fetch('/api/rooms/' + encodeURIComponent(code));
+        const info = await status.json();
+        if(info.deleted){ showToast('Esta sala foi excluída pelo administrador.'); return; }
+      }catch(e){}
+    }
     myName = userNameInput.value.trim() || 'Usuário';
     roomCode = code;
     hostPeerId = 'sala-' + roomCode;
@@ -579,6 +587,15 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     if(!data || !data.type) return;
     if(!['auth-required','auth','auth-ok','auth-failed'].includes(data.type) && !authorizedPeers.has(fromId)) return;
     switch(data.type){
+      case 'room-deleted':
+        roomDeleted = true;
+        document.getElementById('kickedMsg').textContent = 'O administrador excluiu esta sala. O acesso foi encerrado.';
+        document.getElementById('kickedOverlay').classList.add('show');
+        Object.values(activeConns).forEach(c => { try{ c.close(); }catch(e){} });
+        Object.values(activeCalls).forEach(c => { try{ c.close(); }catch(e){} });
+        if(peer){ try{ peer.destroy(); }catch(e){} peer = null; }
+        if(localStream) localStream.getTracks().forEach(t => t.stop());
+        break;
       case 'auth-required':
         if(!isHost) {
           const conn = activeConns[fromId];
@@ -1006,6 +1023,21 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     wbShapes = [];
     document.getElementById('chatMessages').innerHTML = '';
   }
+
+  document.getElementById('btnDeleteRoom')?.addEventListener('click', async () => {
+    if(!isHost || roomDeleted) return;
+    if(!confirm('Excluir esta sala? Todos os clientes serão desconectados e a chave não poderá ser usada novamente.')) return;
+    roomDeleted = true;
+    try{ await fetch('/api/rooms/' + encodeURIComponent(roomCode), { method:'DELETE' }); }catch(e){}
+    broadcastAll({ type:'room-deleted' });
+    Object.values(activeConns).forEach(c => { try{ c.close(); }catch(e){} });
+    Object.values(activeCalls).forEach(c => { try{ c.close(); }catch(e){} });
+    if(localStream) localStream.getTracks().forEach(t => t.stop());
+    if(screenStream) screenStream.getTracks().forEach(t => t.stop());
+    if(peer){ try{ peer.destroy(); }catch(e){} peer = null; }
+    showToast('Sala excluída com sucesso.');
+    setTimeout(() => window.location.reload(), 900);
+  });
 
   document.getElementById('btnLeave').addEventListener('click', () => {
     if(isHost){
