@@ -1376,8 +1376,11 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     updateTranslateBadge(myPeerId, true);
 
     recognition = new SpeechRecognition();
-    recognition.continuous = false;
-    recognition.interimResults = true;
+    // Continuous mode works great on desktop but frequently never fires a
+    // result at all on Android Chrome — so only mobile gets the "one
+    // utterance at a time, auto-restart" workaround.
+    recognition.continuous = !isMobileDevice;
+    recognition.interimResults = isMobileDevice;
     recognition.lang = document.getElementById('myLang').value;
     recognition.maxAlternatives = 1;
 
@@ -1387,7 +1390,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
 
     recognition.onresult = async (event) => {
       const result = event.results[event.results.length - 1];
-      if(!result.isFinal) return; // wait for the finalized utterance (interim results are just previews)
+      if(isMobileDevice && !result.isFinal) return; // mobile: wait for the finalized utterance
       let transcript;
       try{
         transcript = result[0].transcript.trim();
