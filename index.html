@@ -77,6 +77,11 @@ h1 { font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.05em; text-align: 
   .video-caption .caption-name{ color:var(--gold-bright); font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; margin-bottom:3px; }
   .video-caption .caption-original{ color:#e6e2da; font-size:12px; line-height:1.25; }
   .video-caption .caption-translated{ color:var(--gold-bright); font-weight:700; font-size:16px; line-height:1.25; margin-top:3px; overflow-wrap:anywhere; }
+  .mobile-caption-fallback{ display:none; margin:10px 0 0; padding:9px 11px; border-radius:9px; background:rgba(8,9,13,.94); border:1px solid var(--gold); text-align:center; }
+  .mobile-caption-fallback.show{ display:block; }
+  .mobile-caption-fallback .caption-name{ color:var(--gold-bright); font-size:10px; font-weight:700; text-transform:uppercase; }
+  .mobile-caption-fallback .caption-original{ color:#e6e2da; font-size:12px; margin-top:3px; }
+  .mobile-caption-fallback .caption-translated{ color:var(--gold-bright); font-weight:700; font-size:16px; margin-top:3px; }
   .global-captions{ display:none; }
   .stage-captions{ position:absolute; left:12px; right:12px; bottom:12px; padding:10px 14px; border-radius:11px; background:rgba(8,9,13,.94); border:1px solid var(--gold); z-index:8; opacity:0; transform:translateY(10px); pointer-events:none; transition:opacity .2s, transform .2s; text-align:center; box-shadow:0 8px 24px rgba(0,0,0,.45); }
   .stage-captions.show{ opacity:1; transform:translateY(0); }
@@ -90,6 +95,8 @@ h1 { font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.05em; text-align: 
     .video-caption .caption-translated{ font-size:14px; }
     .stage-captions{ left:6px; right:6px; bottom:6px; padding:8px 10px; }
     .stage-captions .caption-translated{ font-size:15px; }
+    .mobile-caption-fallback{ display:none; }
+    .mobile-caption-fallback.show{ display:block; }
   }
 
 .translation-bar { background: var(--panel-2); padding: 12px; border-radius: 10px; border: 1px solid #3f7fd1; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: center; font-size: 14px; margin-top:10px; }
@@ -228,6 +235,11 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     <div class="card" style="margin-top:12px;">
       <h3 style="margin:0 0 8px; font-size:15px; text-align:left; color:var(--cream-dim);">PARTICIPANTES NA SALA</h3>
       <div class="video-grid" id="videoGrid"></div>
+      <div class="mobile-caption-fallback" id="mobileCaptionFallback" aria-live="polite">
+        <div class="caption-name"></div>
+        <div class="caption-original"></div>
+        <div class="caption-translated"></div>
+      </div>
 
       <div class="wb-panel" id="wbPanel">
         <div class="wb-toolbar">
@@ -1500,6 +1512,8 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     const name = peerId === myPeerId
       ? (myName + ' (Você)')
       : ((participants[peerId] && participants[peerId].name) || 'Alguém');
+    original = String(original || '');
+    translated = String(translated || '(tradução indisponível)');
     const caption = document.getElementById('caption-' + peerId);
     if(caption){
       caption.querySelector('.caption-name').textContent = name;
@@ -1508,6 +1522,16 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       caption.classList.add('show');
       clearTimeout(captionTimers[peerId]);
       captionTimers[peerId] = setTimeout(() => caption.classList.remove('show'), 6000);
+    }
+
+    const mobileFallback = document.getElementById('mobileCaptionFallback');
+    if(mobileFallback){
+      mobileFallback.querySelector('.caption-name').textContent = name;
+      mobileFallback.querySelector('.caption-original').textContent = original;
+      mobileFallback.querySelector('.caption-translated').textContent = translated;
+      mobileFallback.classList.add('show');
+      clearTimeout(captionTimers.__mobile);
+      captionTimers.__mobile = setTimeout(() => mobileFallback.classList.remove('show'), 6000);
     }
 
     // A legenda é atualizada nas duas superfícies, mas somente a superfície
