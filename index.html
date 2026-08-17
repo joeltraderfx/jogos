@@ -276,6 +276,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
           <div class="caption-translated"></div>
         </div>
       </div>
+      <div id="audioPlayers" aria-hidden="true"></div>
     </div>
   </section>
 </div>
@@ -323,6 +324,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
   let stageMode = 'grid'; // 'grid' | 'whiteboard' | 'screenshare' — what the main area shows
   let presentingPeerId = null; // who is currently screen-sharing (broadcast to everyone)
   const peerStreams = {}; // peerId -> MediaStream, so the stage can grab any peer's video on demand
+  const remoteAudioElements = {}; // peerId -> audio element dedicated to mobile playback
 
   const participants = {};   // peerId -> { name, isHost, muted }
   const activeConns = {};    // peerId -> DataConnection
@@ -446,6 +448,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     call.on('stream', (remoteStream) => {
       const name = (participants[otherId] && participants[otherId].name) || 'Participante';
       peerStreams[otherId] = remoteStream;
+      attachRemoteAudio(otherId, remoteStream);
       addVideoFeed(otherId, name, remoteStream);
       if(otherId === presentingPeerId) applyStageStreamIfAvailable();
     });
@@ -475,8 +478,8 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     if(stream){
       const stageVideo = document.getElementById('stageVideo');
       stageVideo.srcObject = stream;
-      stageVideo.muted = false;
-      stageVideo.play().catch(() => { document.getElementById('btnEnableAudio').style.display = ''; });
+      stageVideo.muted = true;
+      stageVideo.play().catch(() => {});
     }
     document.getElementById('stageLabel').textContent = label;
   }
@@ -642,6 +645,11 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     delete translateActiveState[peerId];
     delete lastSubtitles[peerId];
     delete peerStreams[peerId];
+    if(remoteAudioElements[peerId]){
+      remoteAudioElements[peerId].srcObject = null;
+      remoteAudioElements[peerId].remove();
+      delete remoteAudioElements[peerId];
+    }
     if(presentingPeerId === peerId){
       presentingPeerId = null;
       if(stageMode === 'screenshare') setStageMode('grid');
@@ -775,7 +783,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     card.id = 'vcard-' + id;
 
     const video = document.createElement('video');
-    video.autoplay = true; video.playsInline = true; video.controls = false; video.muted = !!isMuted;
+    video.autoplay = true; video.playsInline = true; video.controls = false; video.muted = true;
     video.setAttribute('webkit-playsinline', 'true');
     video.srcObject = stream;
     if(!isMuted){
@@ -832,10 +840,32 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     }
   }
 
+  function attachRemoteAudio(peerId, stream){
+    let audio = remoteAudioElements[peerId];
+    if(!audio){
+      audio = document.createElement('audio');
+      audio.id = 'audio-' + peerId;
+      audio.autoplay = true;
+      audio.controls = false;
+      audio.volume = 1;
+      document.getElementById('audioPlayers').appendChild(audio);
+      remoteAudioElements[peerId] = audio;
+    }
+    audio.srcObject = stream;
+    audio.muted = !audioUnlocked;
+    if(audioUnlocked) audio.play().catch(() => {});
+  }
+
+  let audioUnlocked = false;
   function unlockRemoteAudio(){
-    const remoteVideos = Array.from(document.querySelectorAll('.video-card video, #stageVideo'))
-      .filter(video => video.srcObject && video !== document.querySelector('#vcard-' + myPeerId + ' video'));
-    remoteVideos.forEach(video => { video.muted = false; video.play().catch(() => {}); });
+    audioUnlocked = true;
+    Object.values(remoteAudioElements).forEach(audio => {
+      audio.muted = false;
+      audio.volume = 1;
+      audio.play().catch(() => {});
+    });
+    document.getElementById('stageVideo').muted = true;
+    document.getElementById('stageVideo').play().catch(() => {});
     document.getElementById('btnEnableAudio').textContent = '🔊 Áudio ativo';
     document.getElementById('btnEnableAudio').classList.add('active');
     document.getElementById('btnEnableAudio').style.display = '';
@@ -935,6 +965,8 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     for(const k in activeConns) delete activeConns[k];
     for(const k in activeCalls) delete activeCalls[k];
     for(const k in peerStreams) delete peerStreams[k];
+    Object.values(remoteAudioElements).forEach(audio => { audio.srcObject = null; audio.remove(); });
+    for(const k in remoteAudioElements) delete remoteAudioElements[k];
     myInitiatedConns.clear();
     for(const k in translateActiveState) delete translateActiveState[k];
     for(const k in lastSubtitles) delete lastSubtitles[k];
