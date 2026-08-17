@@ -72,13 +72,17 @@ h1 { font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.05em; text-align: 
 .video-card .host-tools button.mute-btn.active{ background: var(--danger); }
 .video-card .screen-tag{ position:absolute; bottom:10px; right:10px; background:rgba(63,127,209,0.9); padding:4px 9px; border-radius:6px; font-size:11px; z-index:2; }
 
-.subtitles { display: none; } /* legacy, unused — kept so nothing references a missing class */
+  .video-caption{ position:absolute; left:8px; right:8px; bottom:8px; padding:8px 10px; border-radius:9px; background:rgba(8,9,13,0.90); border:1px solid rgba(232,184,75,0.7); color:#fff; z-index:3; opacity:0; transform:translateY(8px); pointer-events:none; transition:opacity .2s, transform .2s; text-align:center; text-shadow:0 1px 2px #000; }
+  .video-caption.show{ opacity:1; transform:translateY(0); }
+  .video-caption .caption-name{ color:var(--gold-bright); font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; margin-bottom:3px; }
+  .video-caption .caption-original{ color:#e6e2da; font-size:12px; line-height:1.25; }
+  .video-caption .caption-translated{ color:var(--gold-bright); font-weight:700; font-size:16px; line-height:1.25; margin-top:3px; overflow-wrap:anywhere; }
+  .global-captions{ display:none; }
 
-.global-captions{ position:fixed; left:50%; bottom:16px; transform:translateX(-50%) translateY(20px); width:min(92vw, 640px); text-align:center; background:rgba(10,11,16,0.94); color:#fff; font-size:15px; padding:12px 16px; border-radius:12px; z-index:75; border:1px solid var(--gold); opacity:0; pointer-events:none; transition:opacity .2s, transform .2s; }
-.global-captions.show{ opacity:1; transform:translateX(-50%) translateY(0); }
-.gc-name{ font-size:11px; color:var(--gold-bright); font-weight:700; text-transform:uppercase; letter-spacing:0.08em; margin-bottom:4px; }
-.gc-original{ color:#e6e2da; }
-.gc-translated{ color: var(--gold-bright); font-weight: 700; margin-top: 4px; font-size: 17px; line-height: 1.25; }
+  @media (max-width: 600px){
+    .video-caption{ left:5px; right:5px; bottom:5px; padding:7px 8px; }
+    .video-caption .caption-translated{ font-size:14px; }
+  }
 
 .translation-bar { background: var(--panel-2); padding: 12px; border-radius: 10px; border: 1px solid #3f7fd1; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: center; font-size: 14px; margin-top:10px; }
 select { background: #000; color: #fff; border: 1px solid var(--border); padding: 8px; border-radius: 6px; font-size: 14px; }
@@ -190,8 +194,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
         <button class="tool-btn" id="btnToggleCam" style="display:none;">📹 Câmera</button>
         <button class="tool-btn" id="btnScreenShare" style="display:none;">🖥️ Compartilhar tela</button>
         <button class="tool-btn" id="btnWhiteboard">✏️ Lousa</button>
-        <button class="tool-btn" id="btnRequestCaptions" style="display:none;" title="Pede para todos ativarem a legenda">📢 Pedir legendas a todos</button>
-      </div>
+        </div>
     </div>
 
     <div class="translation-bar">
@@ -254,12 +257,6 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       </div>
     </div>
   </section>
-</div>
-
-<div class="global-captions" id="globalCaptions">
-  <div class="gc-name" id="gcName"></div>
-  <div class="gc-original" id="gcOriginal"></div>
-  <div class="gc-translated" id="gcTranslated"></div>
 </div>
 
 <!-- participants side panel -->
@@ -364,7 +361,6 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       document.getElementById('screen-home').classList.remove('active');
       document.getElementById('screen-room').classList.add('active');
       document.getElementById('chatFab').classList.add('show');
-      if(isHost) document.getElementById('btnRequestCaptions').style.display = '';
       renderParticipantsList();
 
       if(!isHost){
@@ -591,14 +587,6 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
         updateTranslateBadge(fromId, !!data.active);
         break;
 
-      case 'request-captions':
-        showToast('O anfitrião pediu para você ativar as legendas.');
-        if(!isTranslating){
-          const btn = document.getElementById('btnStartTranslate');
-          btn.style.boxShadow = '0 0 0 3px var(--gold-bright)';
-          setTimeout(()=>{ btn.style.boxShadow = ''; }, 4000);
-        }
-        break;
     }
   }
 
@@ -758,7 +746,12 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     tag.className = 'tag'; tag.id = 'tag-' + id;
     tag.innerHTML = '<span class="tag-name">'+escapeHtml(label)+'</span><span class="mic-off" id="micoff-'+id+'" style="display:none;">🔇</span><span class="translate-on" id="translateon-'+id+'" title="Legendas ativas">🌐</span>';
 
-    card.appendChild(video); card.appendChild(tag);
+    const caption = document.createElement('div');
+    caption.className = 'video-caption';
+    caption.id = 'caption-' + id;
+    caption.innerHTML = '<div class="caption-name"></div><div class="caption-original"></div><div class="caption-translated"></div>';
+
+    card.appendChild(video); card.appendChild(tag); card.appendChild(caption);
 
     if(isHost && id !== myPeerId){
       const hostTools = document.createElement('div');
@@ -866,7 +859,6 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     document.getElementById('btnToggleMic').style.display = 'none';
     document.getElementById('btnToggleCam').style.display = 'none';
     document.getElementById('btnScreenShare').style.display = 'none';
-    document.getElementById('btnRequestCaptions').style.display = 'none';
     for(const k in participants) delete participants[k];
     for(const k in activeConns) delete activeConns[k];
     for(const k in activeCalls) delete activeCalls[k];
@@ -991,10 +983,6 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
 
   // The whiteboard is a shared teaching tool: whoever opens or closes it
   // switches the view for the whole room, like screen sharing does.
-  document.getElementById('btnRequestCaptions').addEventListener('click', ()=>{
-    broadcastAll({ type: 'request-captions' });
-    showToast('Pedido enviado — cada pessoa ainda precisa tocar em "Ativar Legendas" no próprio aparelho.');
-  });
 
   document.getElementById('btnWhiteboard').addEventListener('click', ()=>{
     setWhiteboardOpen(!wbOpenState, true);
@@ -1347,23 +1335,34 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       showToast('Erro no reconhecimento de voz: ' + (e.error || 'desconhecido'));
     };
 
-    recognition.onend = () => { if(isTranslating) recognition.start(); };
-    recognition.start();
+    recognition.onend = () => {
+      if(!isTranslating || !recognition) return;
+      setTimeout(() => {
+        if(isTranslating && recognition){ try{ recognition.start(); }catch(e){} }
+      }, 250);
+    };
+    try{ recognition.start(); }catch(e){
+      isTranslating = false;
+      document.getElementById('btnStartTranslate').textContent = 'Ativar Legendas';
+      document.getElementById('btnStartTranslate').style.background = 'var(--success)';
+      showToast('Toque novamente em “Ativar Legendas” para liberar o microfone do celular.');
+    }
   });
 
-  let globalCaptionTimer = null;
+  const captionTimers = {};
   function showSubtitle(peerId, original, translated) {
     const name = peerId === myPeerId
       ? (myName + ' (Você)')
       : ((participants[peerId] && participants[peerId].name) || 'Alguém');
-    document.getElementById('gcName').textContent = name;
-    document.getElementById('gcOriginal').textContent = original;
-    document.getElementById('gcTranslated').textContent = translated;
-    const gc = document.getElementById('globalCaptions');
-    gc.classList.add('show');
-
-    clearTimeout(globalCaptionTimer);
-    globalCaptionTimer = setTimeout(() => { gc.classList.remove('show'); }, 6000);
+    const caption = document.getElementById('caption-' + peerId);
+    if(!caption) return;
+    caption.querySelector('.caption-name').textContent = name;
+    caption.querySelector('.caption-original').textContent = original;
+    caption.querySelector('.caption-translated').textContent = translated;
+    caption.classList.add('show');
+    updateTranslateBadge(peerId, true);
+    clearTimeout(captionTimers[peerId]);
+    captionTimers[peerId] = setTimeout(() => caption.classList.remove('show'), 6000);
   }
 
 })();
