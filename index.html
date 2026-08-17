@@ -2,8 +2,9 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' https:; script-src 'self' 'unsafe-inline' https://unpkg.com; connect-src 'self' https: wss:; media-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com;">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Sala de reunião multilingue</title>
+<title>Administrador — Criar sala</title>
 <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;600;700&display=swap');
@@ -77,11 +78,6 @@ h1 { font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.05em; text-align: 
   .video-caption .caption-name{ color:var(--gold-bright); font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; margin-bottom:3px; }
   .video-caption .caption-original{ color:#e6e2da; font-size:12px; line-height:1.25; }
   .video-caption .caption-translated{ color:var(--gold-bright); font-weight:700; font-size:16px; line-height:1.25; margin-top:3px; overflow-wrap:anywhere; }
-  .mobile-caption-fallback{ display:none; margin:10px 0 0; padding:9px 11px; border-radius:9px; background:rgba(8,9,13,.94); border:1px solid var(--gold); text-align:center; }
-  .mobile-caption-fallback.show{ display:none; }
-  .mobile-caption-fallback .caption-name{ color:var(--gold-bright); font-size:10px; font-weight:700; text-transform:uppercase; }
-  .mobile-caption-fallback .caption-original{ color:#e6e2da; font-size:12px; margin-top:3px; }
-  .mobile-caption-fallback .caption-translated{ color:var(--gold-bright); font-weight:700; font-size:16px; margin-top:3px; }
   .global-captions{ display:none; }
   .stage-captions{ position:absolute; left:12px; right:12px; bottom:12px; padding:10px 14px; border-radius:11px; background:rgba(8,9,13,.94); border:1px solid var(--gold); z-index:8; opacity:0; transform:translateY(10px); pointer-events:none; transition:opacity .2s, transform .2s; text-align:center; box-shadow:0 8px 24px rgba(0,0,0,.45); }
   .stage-captions.show{ opacity:1; transform:translateY(0); }
@@ -95,8 +91,6 @@ h1 { font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.05em; text-align: 
     .video-caption .caption-translated{ font-size:14px; }
     .stage-captions{ left:6px; right:6px; bottom:6px; padding:8px 10px; }
     .stage-captions .caption-translated{ font-size:15px; }
-    .mobile-caption-fallback{ display:none; }
-    .mobile-caption-fallback.show{ display:block; }
   }
 
 .translation-bar { background: var(--panel-2); padding: 12px; border-radius: 10px; border: 1px solid #3f7fd1; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: center; font-size: 14px; margin-top:10px; }
@@ -179,21 +173,24 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
   <h1>SALA DE REUNIÃO <span style="color:var(--gold-bright)">MULTILINGUE</span></h1>
 
   <section class="screen active" id="screen-home">
-    <div class="card">
-      <label style="font-size: 13px; color: var(--cream-dim);">SEU NOME</label>
-      <input class="text-input" id="userNameInput" placeholder="Ex: Joel / Sophia..." maxlength="20">
-
-      <div style="margin-top: 12px;">
-        <label style="font-size: 13px; color: var(--cream-dim);">CÓDIGO DA SALA (4 DIGITOS)</label>
-        <input class="text-input code-input" id="roomCodeInput" maxlength="4" placeholder="1900">
-      </div>
-
-      <div class="btn-group">
-        <button class="big-btn primary" id="btnJoin">Entrar na Sala</button>
-        <button class="big-btn accent" id="btnCreate">Criar Sala</button>
+  <div class="card">
+    <div style="color:var(--gold-bright);font-size:12px;font-weight:700;letter-spacing:.08em;margin-bottom:8px;">ÁREA DO ADMINISTRADOR</div>
+    <h2 style="margin:0 0 8px;">Criar sala de reunião</h2>
+    <p style="color:var(--cream-dim);font-size:13px;line-height:1.5;">Crie uma sala e envie o link exclusivo para seus clientes.</p>
+    <label style="font-size:13px;color:var(--cream-dim);">SEU NOME</label>
+    <input class="text-input" id="userNameInput" placeholder="Nome do administrador" maxlength="20">
+    <div class="btn-group"><button class="big-btn accent" id="btnCreate">Criar sala e gerar link</button></div>
+    <div id="inviteBox" style="display:none;margin-top:14px;padding:12px;border:1px solid var(--success);border-radius:8px;background:rgba(47,169,140,.08);">
+      <strong>Link do cliente</strong>
+      <input class="text-input" id="inviteLink" readonly style="margin-top:8px;font-size:12px;">
+      <button class="big-btn primary" id="copyInvite" style="margin-top:8px;min-width:100%;">Copiar link para enviar</button>
+      <div class="btn-group" style="margin-top:8px;">
+        <button class="big-btn primary" id="sendWhatsApp">Enviar pelo WhatsApp</button>
+        <button class="big-btn meeting" id="sendEmail">Enviar por e-mail</button>
       </div>
     </div>
-  </section>
+  </div>
+</section>
 
   <section class="screen" id="screen-room">
     <div class="card">
@@ -204,17 +201,16 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       </div>
 
       <div class="toolbar">
-        <button class="tool-btn accent-init" id="btnStartMedia">📸 Ativar câmera e áudio</button>
+        <button class="tool-btn accent-init" id="btnStartMedia" style="display:none;">📸 Câmera e áudio automáticos</button>
         <button class="tool-btn" id="btnToggleMic" style="display:none;">🎤 Mic</button>
         <button class="tool-btn" id="btnToggleCam" style="display:none;">📹 Câmera</button>
         <button class="tool-btn" id="btnScreenShare" style="display:none;">🖥️ Compartilhar tela</button>
-        <button class="tool-btn" id="btnEnableAudio" style="display:none;">🔊 Ativar áudio</button>
         <button class="tool-btn" id="btnWhiteboard">✏️ Lousa</button>
         </div>
     </div>
 
     <div class="translation-bar">
-      <strong>🌐 Tradução Simultânea:</strong>
+      <strong>🌐 Tradução Simultânea Automática:</strong>
       <label>Eu falo:</label>
       <select id="myLang">
         <option value="pt-BR">Português (Brasil)</option>
@@ -229,17 +225,12 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
         <option value="es">Espanhol</option>
       </select>
 
-      <button id="btnStartTranslate" style="background:var(--success); color:#fff; border:none; padding:10px 16px; border-radius:6px; cursor:pointer; font-weight:bold;">Ativar Legendas</button>
+      <span id="translationStatus" style="color:var(--gold-bright);font-weight:700;">Tradução automática ativa</span>
     </div>
 
     <div class="card" style="margin-top:12px;">
       <h3 style="margin:0 0 8px; font-size:15px; text-align:left; color:var(--cream-dim);">PARTICIPANTES NA SALA</h3>
       <div class="video-grid" id="videoGrid"></div>
-      <div class="mobile-caption-fallback" id="mobileCaptionFallback" aria-live="polite">
-        <div class="caption-name"></div>
-        <div class="caption-original"></div>
-        <div class="caption-translated"></div>
-      </div>
 
       <div class="wb-panel" id="wbPanel">
         <div class="wb-toolbar">
@@ -288,7 +279,6 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
           <div class="caption-translated"></div>
         </div>
       </div>
-      <div id="audioPlayers" aria-hidden="true"></div>
     </div>
   </section>
 </div>
@@ -302,7 +292,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
 <!-- chat -->
 <button class="chat-fab" id="chatFab"><span>💬</span><span class="badge" id="chatBadge"></span></button>
 <div class="chat-panel" id="chatPanel">
-  <div class="chat-header"><span>Chat da sala</span><button id="chatCloseBtn">✕</button></div>
+  <div class="chat-header"><span>Mensagens traduzidas da sala</span><button id="chatCloseBtn">✕</button></div>
   <div class="chat-messages" id="chatMessages"></div>
   <div class="chat-input-row">
     <input id="chatInput" maxlength="300" placeholder="Escreva uma mensagem...">
@@ -319,6 +309,8 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
 <script>
 (function(){
   "use strict";
+  document.addEventListener('contextmenu', e => e.preventDefault());
+  document.addEventListener('keydown', e => { if((e.ctrlKey||e.metaKey) && ['u','s'].includes(e.key.toLowerCase())) e.preventDefault(); });
 
   /* ================= State ================= */
   let peer = null;
@@ -336,8 +328,6 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
   let stageMode = 'grid'; // 'grid' | 'whiteboard' | 'screenshare' — what the main area shows
   let presentingPeerId = null; // who is currently screen-sharing (broadcast to everyone)
   const peerStreams = {}; // peerId -> MediaStream, so the stage can grab any peer's video on demand
-  const remoteAudioElements = {}; // peerId -> audio element dedicated to mobile playback
-  const isMobileDevice = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
 
   const participants = {};   // peerId -> { name, isHost, muted }
   const activeConns = {};    // peerId -> DataConnection
@@ -352,6 +342,13 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   let recognition = null;
   let isTranslating = false;
+  const SPEECH_WINDOW_MS = 5000;
+  let speechBuffer = [];
+  let speechFlushTimer = null;
+  const DEEPL_PROXY_URL = '/api/deepl/translate';
+  const roomCrypto = { key: null, ready: false };
+  const encoder = new TextEncoder();
+  const decoder = new TextDecoder();
 
   const peerConfig = {
     config: {
@@ -372,17 +369,27 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
 
   /* ================= Entry ================= */
   document.getElementById('btnCreate').addEventListener('click', () => {
-    const code = roomCodeInput.value.trim() || Math.floor(1000 + Math.random() * 9000).toString();
+    const code = Math.floor(1000 + Math.random() * 9000).toString();
+    const invite = new URL('cliente.html', window.location.href);
+    invite.searchParams.set('room', code);
+    document.getElementById('inviteLink').value = invite.toString();
+    document.getElementById('inviteBox').style.display = 'block';
     isHost = true;
     startRoom(code);
   });
 
-  document.getElementById('btnJoin').addEventListener('click', () => {
+  /* Entrada de cliente não existe nesta página. */
+  if(document.getElementById('btnJoin')) document.getElementById('btnJoin').addEventListener('click', () => {
     const code = roomCodeInput.value.trim();
     if(code.length !== 4) return showToast('Digite o código de 4 dígitos!');
     isHost = false;
     startRoom(code);
   });
+
+  document.getElementById('copyInvite')?.addEventListener('click', async () => { try { await navigator.clipboard.writeText(document.getElementById('inviteLink').value); showToast('Link copiado.'); } catch(e) { showToast('Selecione e copie o link manualmente.'); } });
+  function inviteMessage(){ return 'Olá! Você foi convidado para uma reunião multilíngue. Acesse este link para entrar: ' + document.getElementById('inviteLink').value; }
+  document.getElementById('sendWhatsApp')?.addEventListener('click', () => { window.open('https://wa.me/?text=' + encodeURIComponent(inviteMessage()), '_blank', 'noopener'); });
+  document.getElementById('sendEmail')?.addEventListener('click', () => { window.location.href = 'mailto:?subject=' + encodeURIComponent('Convite para reunião multilíngue') + '&body=' + encodeURIComponent(inviteMessage()); });
 
   function startRoom(code) {
     myName = userNameInput.value.trim() || 'Usuário';
@@ -397,8 +404,9 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       document.getElementById('screen-home').classList.remove('active');
       document.getElementById('screen-room').classList.add('active');
       document.getElementById('chatFab').classList.add('show');
-      document.getElementById('btnEnableAudio').style.display = '';
       renderParticipantsList();
+      initRoomCrypto(roomCode).catch(() => {});
+      startMediaAutomatically();
 
       if(!isHost){
         // Bootstrap: the only peer id a newcomer knows in advance is the host's.
@@ -461,7 +469,6 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     call.on('stream', (remoteStream) => {
       const name = (participants[otherId] && participants[otherId].name) || 'Participante';
       peerStreams[otherId] = remoteStream;
-      attachRemoteAudio(otherId, remoteStream);
       addVideoFeed(otherId, name, remoteStream);
       if(otherId === presentingPeerId) applyStageStreamIfAvailable();
     });
@@ -488,12 +495,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     if(stageMode !== 'screenshare' || !presentingPeerId) return;
     const stream = presentingPeerId === myPeerId ? screenStream : peerStreams[presentingPeerId];
     const label = presentingPeerId === myPeerId ? 'Você está compartilhando a tela' : (peerNameFor(presentingPeerId) + ' está compartilhando a tela');
-    if(stream){
-      const stageVideo = document.getElementById('stageVideo');
-      stageVideo.srcObject = stream;
-      stageVideo.muted = isMobileDevice;
-      stageVideo.play().catch(() => {});
-    }
+    if(stream) document.getElementById('stageVideo').srcObject = stream;
     document.getElementById('stageLabel').textContent = label;
   }
 
@@ -526,8 +528,12 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     }));
   }
 
-  function handleData(fromId, data){
-    if(!data || !data.type) return;
+  async function handleData(fromId, data){
+    if(!data) return;
+    if(data.type === 'encrypted'){
+      try { data = await decryptPayload(data.payload); } catch(e) { return; }
+    }
+    if(!data.type) return;
     switch(data.type){
       case 'identity':
         participants[fromId] = { name: data.name, isHost: !!data.isHost, muted: false };
@@ -562,7 +568,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
         break;
 
       case 'chat':
-        addChatBubble(data.name, data.text, false);
+        addChatBubble(data.name, data.original || data.text, false, data.translated);
         break;
 
       case 'subtitle':
@@ -656,13 +662,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     myInitiatedConns.delete(peerId);
     delete participants[peerId];
     delete translateActiveState[peerId];
-    delete lastSubtitles[peerId];
     delete peerStreams[peerId];
-    if(remoteAudioElements[peerId]){
-      remoteAudioElements[peerId].srcObject = null;
-      remoteAudioElements[peerId].remove();
-      delete remoteAudioElements[peerId];
-    }
     if(presentingPeerId === peerId){
       presentingPeerId = null;
       if(stageMode === 'screenshare') setStageMode('grid');
@@ -675,16 +675,17 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
   }
 
   /* ================= Media ================= */
-  document.getElementById('btnStartMedia').addEventListener('click', async () => {
+  async function startMediaAutomatically(){
+    if(mediaStarted || !navigator.mediaDevices?.getUserMedia) return;
     try {
       localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       mediaStarted = true;
+      startAutomaticTranslation();
       addVideoFeed(myPeerId, myName + ' (Você)', localStream, true);
       document.getElementById('btnStartMedia').style.display = 'none';
       document.getElementById('btnToggleMic').style.display = '';
       document.getElementById('btnToggleCam').style.display = '';
       document.getElementById('btnScreenShare').style.display = '';
-      document.getElementById('btnEnableAudio').style.display = '';
 
       // Recover connections that were answered before we had media (they'd
       // never receive our video/audio otherwise), and call anyone we have a
@@ -698,9 +699,12 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
         if(!activeCalls[id]) callPeer(id);
       });
     } catch(e) {
-      showToast('Autorize a câmera e o microfone nas configurações do seu navegador.');
+      showToast('Autorize a câmera e o microfone para iniciar a reunião automática.');
+      const status = document.getElementById('translationStatus');
+      if(status) status.textContent = 'Aguardando permissão de câmera/microfone';
     }
-  });
+  }
+  document.getElementById('btnStartMedia').addEventListener('click', startMediaAutomatically);
 
   document.getElementById('btnToggleMic').addEventListener('click', () => {
     if(!localStream) return;
@@ -796,15 +800,8 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     card.id = 'vcard-' + id;
 
     const video = document.createElement('video');
-    video.autoplay = true; video.playsInline = true; video.controls = false; video.muted = isMobileDevice ? true : !!isMuted;
-    video.setAttribute('webkit-playsinline', 'true');
+    video.autoplay = true; video.playsInline = true; video.muted = !!isMuted;
     video.srcObject = stream;
-    if(!isMuted && !isMobileDevice){
-      video.addEventListener('loadedmetadata', () => {
-        video.muted = false;
-        video.play().catch(() => {});
-      }, { once:true });
-    }
 
     const tag = document.createElement('div');
     tag.className = 'tag'; tag.id = 'tag-' + id;
@@ -828,13 +825,6 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
 
     videoGrid.appendChild(card);
     if(translateActiveState[id]) updateTranslateBadge(id, true);
-    if(lastSubtitles[id]){
-      const saved = lastSubtitles[id];
-      caption.querySelector('.caption-name').textContent = saved.name;
-      caption.querySelector('.caption-original').textContent = saved.original;
-      caption.querySelector('.caption-translated').textContent = saved.translated;
-      caption.classList.add('show');
-    }
     updateParticipantCount();
   }
 
@@ -842,51 +832,8 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     const card = document.getElementById('vcard-' + id);
     if(!card) return;
     const video = card.querySelector('video');
-    if(video){
-      video.srcObject = stream;
-      if(id !== myPeerId){
-        video.muted = isMobileDevice;
-        video.play().catch(() => {
-          if(isMobileDevice) document.getElementById('btnEnableAudio').style.display = '';
-        });
-      }
-    }
+    if(video) video.srcObject = stream;
   }
-
-  function attachRemoteAudio(peerId, stream){
-    let audio = remoteAudioElements[peerId];
-    if(!audio){
-      audio = document.createElement('audio');
-      audio.id = 'audio-' + peerId;
-      audio.autoplay = true;
-      audio.controls = false;
-      audio.volume = 1;
-      document.getElementById('audioPlayers').appendChild(audio);
-      remoteAudioElements[peerId] = audio;
-    }
-    audio.srcObject = stream;
-    audio.muted = !audioUnlocked;
-    if(audioUnlocked) audio.play().catch(() => {});
-  }
-
-  let audioUnlocked = false;
-  function unlockRemoteAudio(){
-    audioUnlocked = true;
-    Object.values(remoteAudioElements).forEach(audio => {
-      audio.muted = false;
-      audio.volume = 1;
-      audio.play().catch(() => {});
-    });
-    document.getElementById('stageVideo').muted = isMobileDevice;
-    document.getElementById('stageVideo').play().catch(() => {});
-    document.getElementById('btnEnableAudio').textContent = '🔊 Áudio ativo';
-    document.getElementById('btnEnableAudio').classList.add('active');
-    document.getElementById('btnEnableAudio').style.display = '';
-  }
-
-  // O áudio só é desbloqueado por uma ação explícita, evitando tentativas
-  // repetidas a cada toque na tela do celular.
-  document.getElementById('btnEnableAudio').addEventListener('click', unlockRemoteAudio);
 
   function removeVideoFeed(id){
     const card = document.getElementById('vcard-' + id);
@@ -973,21 +920,16 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     document.getElementById('btnToggleMic').style.display = 'none';
     document.getElementById('btnToggleCam').style.display = 'none';
     document.getElementById('btnScreenShare').style.display = 'none';
-    document.getElementById('btnEnableAudio').style.display = 'none';
     for(const k in participants) delete participants[k];
     for(const k in activeConns) delete activeConns[k];
     for(const k in activeCalls) delete activeCalls[k];
     for(const k in peerStreams) delete peerStreams[k];
-    Object.values(remoteAudioElements).forEach(audio => { audio.srcObject = null; audio.remove(); });
-    for(const k in remoteAudioElements) delete remoteAudioElements[k];
     myInitiatedConns.clear();
     for(const k in translateActiveState) delete translateActiveState[k];
-    for(const k in lastSubtitles) delete lastSubtitles[k];
-    lastStageSubtitle = null;
     isTranslating = false;
     if(recognition){ try{ recognition.stop(); }catch(e){} recognition = null; }
-    document.getElementById('btnStartTranslate').textContent = "Ativar Legendas";
-    document.getElementById('btnStartTranslate').style.background = "var(--success)";
+    const translationStatus = document.getElementById('translationStatus');
+    if(translationStatus) translationStatus.textContent = 'Tradução automática ativa';
     wbShapes = [];
     document.getElementById('chatMessages').innerHTML = '';
   }
@@ -1051,23 +993,33 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
   });
   document.getElementById('chatCloseBtn').addEventListener('click', ()=> chatPanel.classList.remove('show'));
 
-  function addChatBubble(name, text, mine){
+  function addChatBubble(name, text, mine, translated){
     const b = document.createElement('div');
     b.className = 'chat-bubble ' + (mine ? 'mine' : 'theirs');
-    b.innerHTML = (mine ? '' : '<div class="who">'+escapeHtml(name)+'</div>') + escapeHtml(text);
+    const translation = translated && translated !== text ? '<div style="margin-top:4px;font-weight:700;color:var(--gold-bright)">' + escapeHtml(translated) + '</div>' : '';
+    b.innerHTML = (mine ? '' : '<div class="who">'+escapeHtml(name)+'</div>') + escapeHtml(text) + translation;
     chatMessagesEl.appendChild(b);
     chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
-    if(!mine && !chatPanel.classList.contains('show')){
-      chatBadge.classList.add('show');
-    }
+    if(!mine && !chatPanel.classList.contains('show')) chatBadge.classList.add('show');
   }
 
-  function sendChatMessage(){
+  async function translateText(text, sourceLang, targetLang){
+    const res = await fetch(DEEPL_PROXY_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ text, sourceLang, targetLang }) });
+    if(!res.ok) throw new Error('DeepL indisponível');
+    const data = await res.json();
+    return data.translatedText || (data.translations && data.translations[0] && data.translations[0].text) || '';
+  }
+
+  async function sendChatMessage(){
     const text = chatInput.value.trim();
     if(!text) return;
     chatInput.value = '';
-    addChatBubble(myName, text, true);
-    broadcastAll({ type: 'chat', name: myName, text: text.slice(0,300) });
+    const sourceLang = document.getElementById('myLang').value.split('-')[0];
+    const targetLang = document.getElementById('targetLang').value;
+    let translated = '';
+    try { translated = await translateText(text, sourceLang, targetLang); } catch(e) {}
+    addChatBubble(myName, text, true, translated);
+    await broadcastEncrypted({ type:'chat', name:myName, original:text.slice(0,300), translated:translated.slice(0,500) });
   }
   document.getElementById('chatSendBtn').addEventListener('click', sendChatMessage);
   chatInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter') sendChatMessage(); });
@@ -1386,125 +1338,88 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
   }
 
 
-  /* ================= Speech recognition + translation (kept working) ================= */
-  document.getElementById('btnStartTranslate').addEventListener('click', () => {
-    if(!SpeechRecognition) return showToast('Utilize o navegador Google Chrome no celular.');
 
-    if(isTranslating) {
-      if(recognition) recognition.stop();
-      isTranslating = false;
-      document.getElementById('btnStartTranslate').textContent = "Ativar Legendas";
-      document.getElementById('btnStartTranslate').style.background = "var(--success)";
-      broadcastAll({ type: 'translate-state', active: false });
-      updateTranslateBadge(myPeerId, false);
-      return;
-    }
+  /* ================= Criptografia de aplicação ================= */
+  async function initRoomCrypto(room){
+    const material = await crypto.subtle.importKey('raw', encoder.encode(room), 'PBKDF2', false, ['deriveKey']);
+    roomCrypto.key = await crypto.subtle.deriveKey({name:'PBKDF2', salt:encoder.encode('sala-traducao-v1'), iterations:120000, hash:'SHA-256'}, material, {name:'AES-GCM', length:256}, false, ['encrypt','decrypt']);
+    roomCrypto.ready = true;
+  }
+  async function encryptPayload(data){
+    if(!roomCrypto.ready) return data;
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const cipher = await crypto.subtle.encrypt({name:'AES-GCM', iv}, roomCrypto.key, encoder.encode(JSON.stringify(data)));
+    return { iv:Array.from(iv), data:Array.from(new Uint8Array(cipher)) };
+  }
+  async function decryptPayload(payload){
+    if(!roomCrypto.ready) throw new Error('chave indisponível');
+    const plain = await crypto.subtle.decrypt({name:'AES-GCM', iv:new Uint8Array(payload.iv)}, roomCrypto.key, new Uint8Array(payload.data));
+    return JSON.parse(decoder.decode(plain));
+  }
+  async function broadcastEncrypted(data){
+    const payload = await encryptPayload(data);
+    broadcastAll(roomCrypto.ready ? {type:'encrypted', payload} : data);
+  }
 
+  /* ================= Reconhecimento automático com janela de fala de 5 segundos ================= */
+  function startAutomaticTranslation(){
+    if(!SpeechRecognition || isTranslating) return;
     isTranslating = true;
-    document.getElementById('btnStartTranslate').textContent = "Parar Legendas";
-    document.getElementById('btnStartTranslate').style.background = "var(--danger)";
-    broadcastAll({ type: 'translate-state', active: true });
+    const status = document.getElementById('translationStatus');
+    if(status) status.textContent = 'Tradução automática ativa — janela de 5 segundos';
+    broadcastEncrypted({ type:'translate-state', active:true });
     updateTranslateBadge(myPeerId, true);
-
     recognition = new SpeechRecognition();
     recognition.continuous = true;
     recognition.interimResults = false;
-    recognition.onstart = () => {
-      document.getElementById('btnStartTranslate').classList.add('active');
-    };
     recognition.lang = document.getElementById('myLang').value;
-    // Chrome Android usa o prefixo webkitSpeechRecognition; manter o idioma
-    // explícito evita que o celular tente reconhecer no idioma padrão do sistema.
     recognition.maxAlternatives = 1;
-
-    recognition.onresult = async (event) => {
-      let transcript;
-      try{
-        transcript = event.results[event.results.length - 1][0].transcript.trim();
-      }catch(e){ return; }
-      if(!transcript || transcript.length < 2) return;
-
-      const targetLang = document.getElementById('targetLang').value;
-      const sourceLang = recognition.lang.split('-')[0];
-
-      // Show the original line immediately so something is always visible,
-      // even if the translation call is slow or fails (common on flaky
-      // mobile connections).
-      showSubtitle(myPeerId, transcript, 'traduzindo...');
-      broadcastAll({ type: 'subtitle', peerId: myPeerId, original: transcript, translated: '(traduzindo...)' });
-
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 8000);
-        const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(transcript)}&langpair=${sourceLang}|${targetLang}`, { signal: controller.signal });
-        clearTimeout(timeoutId);
-        if(!res.ok) throw new Error('HTTP ' + res.status);
-        const data = await res.json();
-
-        if(data && data.responseData && data.responseData.translatedText) {
-          const translatedText = data.responseData.translatedText;
-          if(translatedText.includes("NO QUERY SPECIFIED")) return;
-
-          showSubtitle(myPeerId, transcript, translatedText);
-          broadcastAll({ type: 'subtitle', peerId: myPeerId, original: transcript, translated: translatedText });
-        } else {
-          throw new Error('Resposta inesperada do tradutor');
+    recognition.onresult = (event) => {
+      for(let i = event.resultIndex; i < event.results.length; i++){
+        if(event.results[i].isFinal){
+          const text = event.results[i][0].transcript.trim();
+          if(text.length >= 2) speechBuffer.push(text);
         }
-      } catch(e) {
-        const message = e && e.name === 'AbortError' ? 'tempo esgotado' : (e && e.message ? e.message : 'erro de rede');
-        showToast('Falha ao traduzir: ' + message + '.');
-        showSubtitle(myPeerId, transcript, '(tradução indisponível)');
       }
+      clearTimeout(speechFlushTimer);
+      speechFlushTimer = setTimeout(flushSpeechBuffer, SPEECH_WINDOW_MS);
     };
-
     recognition.onerror = (e) => {
-      // 'no-speech' e 'aborted' são normais em pausas no celular.
-      if(e.error === 'no-speech' || e.error === 'aborted') return;
       if(e.error === 'not-allowed' || e.error === 'service-not-allowed'){
-        isTranslating = false;
-        document.getElementById('btnStartTranslate').textContent = 'Ativar Legendas';
-        document.getElementById('btnStartTranslate').style.background = 'var(--success)';
-        showToast('No celular, permita o microfone e o reconhecimento de voz para traduzir.');
-        return;
+        if(status) status.textContent = 'Permita o microfone para traduzir automaticamente';
       }
-      showToast('Erro no reconhecimento de voz: ' + (e.error || 'desconhecido'));
     };
+    recognition.onend = () => { if(isTranslating) setTimeout(() => { try{ recognition.start(); }catch(e){} }, 250); };
+    try { recognition.start(); } catch(e) {}
+  }
 
-    recognition.onend = () => {
-      if(!isTranslating || !recognition) return;
-      setTimeout(() => {
-        if(isTranslating && recognition){ try{ recognition.start(); }catch(e){} }
-      }, 250);
-    };
-    const startRecognition = () => {
-      try{ recognition.start(); }
-      catch(e){
-        isTranslating = false;
-        document.getElementById('btnStartTranslate').textContent = 'Ativar Legendas';
-        document.getElementById('btnStartTranslate').style.background = 'var(--success)';
-        showToast('Toque novamente em “Ativar Legendas” para liberar o microfone do celular.');
-      }
-    };
-    // Em alguns celulares, o reconhecimento só inicia depois que o microfone
-    // foi autorizado nesta mesma sessão. O pedido é feito após o toque do usuário.
-    if(!localStream && navigator.mediaDevices && navigator.mediaDevices.getUserMedia){
-      navigator.mediaDevices.getUserMedia({ audio:true }).then(stream => {
-        localStream = stream;
-        mediaStarted = true;
-        startRecognition();
-      }).catch(() => {
-        isTranslating = false;
-        document.getElementById('btnStartTranslate').textContent = 'Ativar Legendas';
-        document.getElementById('btnStartTranslate').style.background = 'var(--success)';
-        showToast('Permita o microfone nas configurações do navegador do celular.');
-      });
-    } else {
-      startRecognition();
+  async function flushSpeechBuffer(){
+    if(!speechBuffer.length) return;
+    const transcript = speechBuffer.join(' ');
+    speechBuffer = [];
+    const sourceLang = document.getElementById('myLang').value.split('-')[0];
+    const targetLang = document.getElementById('targetLang').value;
+    showSubtitle(myPeerId, transcript, 'traduzindo com DeepL...');
+    try{
+      const translated = await translateText(transcript, sourceLang, targetLang);
+      showSubtitle(myPeerId, transcript, translated);
+      await broadcastEncrypted({ type:'subtitle', peerId:myPeerId, original:transcript, translated });
+    }catch(e){
+      showSubtitle(myPeerId, transcript, 'Tradução temporariamente indisponível');
+      showToast('Configure o proxy seguro do DeepL no servidor.');
     }
-  });
+  }
+
+  if(SpeechRecognition){
+    document.getElementById('myLang').addEventListener('change', () => {
+      if(isTranslating){ try{ recognition.stop(); }catch(e){} isTranslating = false; setTimeout(startAutomaticTranslation, 300); }
+    });
+  } else {
+    const status = document.getElementById('translationStatus');
+    if(status) status.textContent = 'Use Google Chrome para reconhecimento automático';
+  }
 
   const captionTimers = {};
-  const lastSubtitles = {}; // preserva a legenda mesmo se o cartão de vídeo for recriado
   let lastStageSubtitle = null;
   function renderStageSubtitle(target, subtitle){
     if(!target || !subtitle) return;
@@ -1517,8 +1432,6 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     const name = peerId === myPeerId
       ? (myName + ' (Você)')
       : ((participants[peerId] && participants[peerId].name) || 'Alguém');
-    original = String(original || '');
-    translated = String(translated || '(tradução indisponível)');
     const caption = document.getElementById('caption-' + peerId);
     if(caption){
       caption.querySelector('.caption-name').textContent = name;
@@ -1529,20 +1442,9 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       captionTimers[peerId] = setTimeout(() => caption.classList.remove('show'), 6000);
     }
 
-    const mobileFallback = document.getElementById('mobileCaptionFallback');
-    if(mobileFallback){
-      mobileFallback.querySelector('.caption-name').textContent = name;
-      mobileFallback.querySelector('.caption-original').textContent = original;
-      mobileFallback.querySelector('.caption-translated').textContent = translated;
-      mobileFallback.classList.add('show');
-      clearTimeout(captionTimers.__mobile);
-      captionTimers.__mobile = setTimeout(() => mobileFallback.classList.remove('show'), 6000);
-    }
-
     // A legenda é atualizada nas duas superfícies, mas somente a superfície
     // atualmente aberta fica visível. Assim ela permanece dentro da lousa/tela.
-    lastSubtitles[peerId] = { name, original, translated };
-    lastStageSubtitle = lastSubtitles[peerId];
+    lastStageSubtitle = { name, original, translated };
     ['wbCaptions','screenCaptions'].forEach(id => renderStageSubtitle(document.getElementById(id), lastStageSubtitle));
     clearTimeout(captionTimers.__stage);
     captionTimers.__stage = setTimeout(() => {
