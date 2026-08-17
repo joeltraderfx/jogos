@@ -186,6 +186,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     <p class="helper">Digite somente o seu nome para entrar na sala recebida por convite.</p>
     <label style="font-size:13px;color:var(--cream-dim);">SEU NOME</label>
     <input class="text-input" id="userNameInput" placeholder="Digite seu nome" maxlength="20">
+    <input class="text-input" id="roomPasswordInput" type="password" placeholder="Senha da sala" minlength="4" maxlength="64" autocomplete="current-password">
     <input id="roomCodeInput" type="hidden">
     <div class="btn-group"><button class="big-btn primary" id="btnJoin">Entrar na Sala</button></div>
   </div>
@@ -318,7 +319,9 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
   let roomCode = '';
   let myPeerId = '';
   let hostPeerId = '';
+  let roomPassword = '';
   let isHost = false;
+  const authorizedPeers = new Set();
   let micEnabled = true;
   let camEnabled = true;
   let isScreenSharing = false;
@@ -391,14 +394,20 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
 
   /* ================= Entry ================= */
   if(document.getElementById('btnCreate')) document.getElementById('btnCreate').addEventListener('click', () => {
-    const code = roomCodeInput.value.trim() || Math.floor(1000 + Math.random() * 9000).toString();
+    const code = roomCodeInput ? (roomCodeInput.value.trim() || Math.floor(1000 + Math.random() * 9000).toString()) : Math.floor(1000 + Math.random() * 9000).toString();
+    const password = document.getElementById('roomPasswordInput').value.trim();
+    if(password.length < 4) return showToast('Crie uma senha com pelo menos 4 caracteres.');
+    roomPassword = password;
     isHost = true;
     startRoom(code);
   });
 
   if(document.getElementById('btnJoin')) document.getElementById('btnJoin').addEventListener('click', () => {
     const code = roomCodeInput.value.trim();
-    if(code.length !== 4) return showToast('Digite o código de 4 dígitos!');
+    const password = document.getElementById('roomPasswordInput').value.trim();
+    if(code.length !== 4) return showToast('O link da sala não contém uma chave válida.');
+    if(password.length < 4) return showToast('Digite a senha da sala.');
+    roomPassword = password;
     isHost = false;
     startRoom(code);
   });
@@ -520,17 +529,10 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
   function setupConnection(conn){
     activeConns[conn.peer] = conn;
     conn.on('open', () => {
-      conn.send({ type: 'identity', name: myName, peerId: myPeerId, isHost: isHost });
-      if(isHost){
-        conn.send({ type: 'roster', participants: getRosterList(), wbShapes: wbShapes });
-        conn.send({ type: 'feature-state', features: featureConfig });
-      }
-      // Only the side that opened this data connection also places the media
-      // call — the other side just answers. If both sides called each other
-      // we'd end up with two redundant peer connections for the same pair.
-      if(myInitiatedConns.has(conn.peer)){
-        callPeer(conn.peer);
-      }
+      // A participant is not identified, added to the roster, called, or given
+      // meeting data until the room password has been validated.
+      if(isHost) conn.send({ type: 'auth-required' });
+      else conn.send({ type: 'auth', password: roomPassword });
     });
     conn.on('data', (data) => handleData(conn.peer, data));
     conn.on('close', () => { handlePeerLeft(conn.peer); });
@@ -543,9 +545,46 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     }));
   }
 
+  function sendIdentityAfterAuth(conn){
+    if(!conn || !authorizedPeers.has(conn.peer)) return;
+    conn.send({ type: 'identity', name: myName, peerId: myPeerId, isHost: isHost });
+    if(isHost){
+      conn.send({ type: 'roster', participants: getRosterList(), wbShapes: wbShapes });
+      conn.send({ type: 'feature-state', features: featureConfig });
+    }
+    if(myInitiatedConns.has(conn.peer)) callPeer(conn.peer);
+  }
+
   function handleData(fromId, data){
     if(!data || !data.type) return;
+    if(!['auth-required','auth','auth-ok','auth-failed'].includes(data.type) && !authorizedPeers.has(fromId)) return;
     switch(data.type){
+      case 'auth-required':
+        if(!isHost) {
+          const conn = activeConns[fromId];
+          if(conn) conn.send({ type:'auth', password:roomPassword });
+        }
+        break;
+      case 'auth':
+        if(!isHost) break;
+        if(typeof data.password !== 'string' || data.password !== roomPassword){
+          const bad = activeConns[fromId];
+          if(bad) bad.send({ type:'auth-failed' });
+          setTimeout(() => { try{ bad?.close(); }catch(e){} }, 250);
+          break;
+        }
+        authorizedPeers.add(fromId);
+        const good = activeConns[fromId];
+        if(good){ good.send({ type:'auth-ok' }); sendIdentityAfterAuth(good); }
+        break;
+      case 'auth-ok':
+        authorizedPeers.add(fromId);
+        sendIdentityAfterAuth(activeConns[fromId]);
+        break;
+      case 'auth-failed':
+        showToast('Senha incorreta. Acesso bloqueado.');
+        try{ activeConns[fromId]?.close(); }catch(e){}
+        break;
       case 'identity':
         participants[fromId] = { name: data.name, isHost: !!data.isHost, muted: false };
         updateVideoTag(fromId, data.name);
