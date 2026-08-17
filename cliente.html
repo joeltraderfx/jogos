@@ -181,6 +181,12 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
 .invite-actions button.whatsapp{background:#1f9d55;}
 .invite-actions button.email{background:#6b5bd6;}
 
+
+.feature-card .feature-toggle{width:100%;display:flex;align-items:center;justify-content:space-between;background:none;border:0;color:var(--gold-bright);font-weight:700;font-size:13px;padding:0;cursor:pointer;text-align:left;}
+.feature-card .feature-toggle .chevron{font-size:18px;transition:transform .2s;}
+.feature-card.collapsed .feature-toggle .chevron{transform:rotate(-90deg);}
+.feature-card.collapsed .feature-body{display:none;}
+
 </style>
 </head>
 <body>
@@ -233,8 +239,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
         <option value="es">Espanhol</option>
       </select>
 
-      <button id="btnStartTranslate" style="background:var(--success); color:#fff; border:none; padding:10px 16px; border-radius:6px; cursor:pointer; font-weight:bold;">Iniciar tradução</button>
-      <div class="speech-clock" id="speechClock"><div class="speech-clock-label">Tempo de fala: <b id="speechSeconds">6.0</b>s</div><div class="speech-track"><div class="speech-fill" id="speechFill"></div></div></div>
+      <button id="btnStartTranslate" style="background:var(--success); color:#fff; border:none; padding:10px 16px; border-radius:6px; cursor:pointer; font-weight:bold;">Iniciar tradução</button></div></div>
     </div>
 
     <div class="card" style="margin-top:12px;">
@@ -352,10 +357,9 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   let recognition = null;
   let isTranslating = false;
-  const SPEECH_WINDOW_MS = 6000;
-  let speechBuffer = [];
-  let speechClockTimer = null;
-  let speechClockStartedAt = 0;
+  let liveTranslationTimer = null;
+  let lastLiveTranscript = '';
+  let liveRequestSerial = 0;
   const DEEPL_PROXY_URL = '/api/deepl/translate';
   const isAdmin = document.documentElement.dataset.role === 'admin';
   let featureConfig = { audio:true, video:true, chat:true, translation:true, screenShare:true, whiteboard:true };
@@ -428,6 +432,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
   });
 
   if(isAdmin){ ['featureAudio','featureVideo','featureChat','featureTranslation','featureScreenShare','featureWhiteboard'].forEach(id => document.getElementById(id)?.addEventListener('change', updateFeatureConfig)); }
+  document.getElementById('featureToggle')?.addEventListener('click', () => document.getElementById('adminFeatures')?.classList.toggle('collapsed'));
   if(!isAdmin){ const inviteRoom = new URLSearchParams(window.location.search).get('room'); if(inviteRoom && /^\d{4}$/.test(inviteRoom)) document.getElementById('roomCodeInput').value = inviteRoom; }
 
   async function startRoom(code) {
@@ -1413,47 +1418,42 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
   }
 
 
-  /* ================= DeepL + janela de fala de 6 segundos ================= */
+  /* ================= DeepL + tradução em tempo real ================= */
   async function translateWithDeepL(text, sourceLang, targetLang){
     const response = await fetch(DEEPL_PROXY_URL, {
       method:'POST', headers:{'Content-Type':'application/json'},
       body:JSON.stringify({ text, sourceLang, targetLang })
     });
-    if(!response.ok) throw new Error('DeepL indisponível');
-    const data = await response.json();
+    let data = {};
+    try{ data = await response.json(); }catch(e){}
+    if(!response.ok) throw new Error(data.error || ('DeepL HTTP ' + response.status));
     return data.translatedText || '';
   }
 
-  function updateSpeechClock(progress){
-    const fill = document.getElementById('speechFill');
-    const seconds = document.getElementById('speechSeconds');
-    if(fill) fill.style.width = Math.max(0, Math.min(100, progress * 100)) + '%';
-    if(seconds) seconds.textContent = Math.max(0, (SPEECH_WINDOW_MS * (1-progress) / 1000)).toFixed(1);
+  function queueLiveTranslation(transcript){
+    transcript = String(transcript || '').replace(/\s+/g,' ').trim();
+    if(transcript.length < 2 || transcript === lastLiveTranscript) return;
+    clearTimeout(liveTranslationTimer);
+    liveTranslationTimer = setTimeout(() => translateLive(transcript), 220);
   }
-  function startSpeechClock(){
-    speechClockStartedAt = Date.now();
-    clearInterval(speechClockTimer);
-    speechClockTimer = setInterval(() => {
-      const progress = (Date.now() - speechClockStartedAt) / SPEECH_WINDOW_MS;
-      updateSpeechClock(progress);
-      if(progress >= 1){ clearInterval(speechClockTimer); flushSpeechWindow(); }
-    }, 100);
-  }
-  async function flushSpeechWindow(){
-    if(!speechBuffer.length) return;
-    const transcript = speechBuffer.join(' ').replace(/\s+/g,' ').trim();
-    speechBuffer = [];
-    updateSpeechClock(0);
+
+  async function translateLive(transcript){
+    if(!isTranslating || transcript === lastLiveTranscript) return;
+    lastLiveTranscript = transcript;
+    const requestId = ++liveRequestSerial;
     const sourceLang = document.getElementById('myLang').value.split('-')[0];
     const targetLang = document.getElementById('targetLang').value;
-    showSubtitle(myPeerId, transcript, 'traduzindo com DeepL...');
+    showSubtitle(myPeerId, transcript, 'traduzindo...');
     try{
       const translated = await translateWithDeepL(transcript, sourceLang, targetLang);
+      if(requestId !== liveRequestSerial) return;
       showSubtitle(myPeerId, transcript, translated || 'Tradução indisponível');
       broadcastAll({ type:'subtitle', peerId:myPeerId, original:transcript, translated:translated || 'Tradução indisponível' });
     }catch(e){
-      showSubtitle(myPeerId, transcript, 'DeepL indisponível');
-      showToast('O servidor de tradução DeepL não respondeu.');
+      if(requestId !== liveRequestSerial) return;
+      const msg = e && e.message ? e.message : 'DeepL indisponível';
+      showSubtitle(myPeerId, transcript, msg);
+      showToast(msg.includes('não configurado') ? 'Configure DEEPL_AUTH_KEY no servidor Render.' : 'DeepL: ' + msg);
     }
   }
 
@@ -1462,7 +1462,8 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     if(isTranslating){
       try{ recognition.stop(); }catch(e){}
       isTranslating = false;
-      clearInterval(speechClockTimer);
+      clearTimeout(liveTranslationTimer);
+      liveRequestSerial++;
       document.getElementById('btnStartTranslate').textContent = 'Iniciar tradução';
       broadcastAll({ type:'translate-state', active:false });
       updateTranslateBadge(myPeerId, false);
@@ -1474,16 +1475,13 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     updateTranslateBadge(myPeerId, true);
     recognition = new SpeechRecognition();
     recognition.continuous = true;
-    recognition.interimResults = false;
+    recognition.interimResults = true;
     recognition.lang = document.getElementById('myLang').value;
     recognition.maxAlternatives = 1;
     recognition.onresult = (event) => {
-      for(let i=event.resultIndex; i<event.results.length; i++){
-        if(event.results[i].isFinal){
-          const text = event.results[i][0].transcript.trim();
-          if(text.length >= 2){ speechBuffer.push(text); startSpeechClock(); }
-        }
-      }
+      let text = '';
+      for(let i=event.resultIndex; i<event.results.length; i++) text += ' ' + event.results[i][0].transcript;
+      queueLiveTranslation(text);
     };
     recognition.onerror = (e) => {
       if(e.error === 'not-allowed' || e.error === 'service-not-allowed') showToast('Permita o microfone para traduzir.');

@@ -14,14 +14,15 @@ app.post('/api/deepl/translate', async (req, res) => {
     return res.status(400).json({ error: 'Texto inválido' });
   }
   const authKey = process.env.DEEPL_AUTH_KEY;
-  if (!authKey) return res.status(503).json({ error: 'DeepL não configurado' });
+  if (!authKey) return res.status(503).json({ error: 'DeepL não configurado no servidor' });
   try {
-    const response = await fetch('https://api-free.deepl.com/v2/translate', {
+    const deeplBase = process.env.DEEPL_API_URL || (authKey.endsWith(':fx') ? 'https://api-free.deepl.com' : 'https://api.deepl.com');
+    const response = await fetch(deeplBase + '/v2/translate', {
       method: 'POST',
       headers: { 'Authorization': `DeepL-Auth-Key ${authKey}`, 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({ text: text.trim(), source_lang: String(sourceLang || '').slice(0, 5).toUpperCase(), target_lang: String(targetLang || 'EN').slice(0, 5).toUpperCase() })
     });
-    if (!response.ok) return res.status(502).json({ error: 'Falha no DeepL' });
+    if (!response.ok) { const detail = await response.text(); return res.status(502).json({ error: 'Falha no DeepL: ' + detail.slice(0, 180) }); }
     const data = await response.json();
     res.json({ translatedText: data.translations?.[0]?.text || '' });
   } catch (error) {
