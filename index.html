@@ -78,16 +78,17 @@ h1 { font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.05em; text-align: 
   .video-caption .caption-original{ color:#e6e2da; font-size:12px; line-height:1.25; }
   .video-caption .caption-translated{ color:var(--gold-bright); font-weight:700; font-size:16px; line-height:1.25; margin-top:3px; overflow-wrap:anywhere; }
   .global-captions{ display:none; }
-  .stage-captions{ position:fixed; left:50%; bottom:18px; transform:translateX(-50%) translateY(10px); width:min(92vw, 720px); padding:10px 14px; border-radius:11px; background:rgba(8,9,13,.94); border:1px solid var(--gold); z-index:90; opacity:0; pointer-events:none; transition:opacity .2s, transform .2s; text-align:center; box-shadow:0 8px 24px rgba(0,0,0,.45); }
-  .stage-captions.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+  .stage-captions{ position:absolute; left:12px; right:12px; bottom:12px; padding:10px 14px; border-radius:11px; background:rgba(8,9,13,.94); border:1px solid var(--gold); z-index:8; opacity:0; transform:translateY(10px); pointer-events:none; transition:opacity .2s, transform .2s; text-align:center; box-shadow:0 8px 24px rgba(0,0,0,.45); }
+  .stage-captions.show{ opacity:1; transform:translateY(0); }
   .stage-captions .caption-name{ color:var(--gold-bright); font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; margin-bottom:3px; }
   .stage-captions .caption-original{ color:#e6e2da; font-size:12px; line-height:1.25; }
   .stage-captions .caption-translated{ color:var(--gold-bright); font-size:17px; line-height:1.25; font-weight:700; margin-top:3px; overflow-wrap:anywhere; }
+  .wb-canvas-wrap, .stage-screenshare{ position:relative; }
 
   @media (max-width: 600px){
     .video-caption{ left:5px; right:5px; bottom:5px; padding:7px 8px; }
     .video-caption .caption-translated{ font-size:14px; }
-    .stage-captions{ bottom:12px; width:94vw; padding:8px 10px; }
+    .stage-captions{ left:6px; right:6px; bottom:6px; padding:8px 10px; }
     .stage-captions .caption-translated{ font-size:15px; }
   }
 
@@ -255,21 +256,27 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
           <button data-fmt="bigger" title="Aumentar">A+</button>
           <button data-fmt="delete" title="Excluir este item">🗑️ Excluir item</button>
         </div>
-        <div class="wb-canvas-wrap"><canvas id="wbCanvas"></canvas></div>
+        <div class="wb-canvas-wrap">
+          <canvas id="wbCanvas"></canvas>
+          <div class="stage-captions" id="wbCaptions" aria-live="polite">
+            <div class="caption-name"></div>
+            <div class="caption-original"></div>
+            <div class="caption-translated"></div>
+          </div>
+        </div>
       </div>
 
       <div class="stage-screenshare" id="stageScreenshare">
         <video id="stageVideo" autoplay playsinline></video>
         <div class="stage-label" id="stageLabel">Compartilhando tela</div>
+        <div class="stage-captions" id="screenCaptions" aria-live="polite">
+          <div class="caption-name"></div>
+          <div class="caption-original"></div>
+          <div class="caption-translated"></div>
+        </div>
       </div>
     </div>
   </section>
-</div>
-
-<div class="stage-captions" id="stageCaptions" aria-live="polite">
-  <div class="caption-name"></div>
-  <div class="caption-original"></div>
-  <div class="caption-translated"></div>
 </div>
 
 <!-- participants side panel -->
@@ -450,9 +457,13 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     videoGrid.style.display = mode === 'grid' ? '' : 'none';
     wbPanel.classList.toggle('show', mode === 'whiteboard');
     document.getElementById('stageScreenshare').classList.toggle('show', mode === 'screenshare');
-    // Fora da grade, a tradução usa o painel persistente sobre a lousa/tela.
-    const stageCaptions = document.getElementById('stageCaptions');
-    if(stageCaptions && mode === 'grid') stageCaptions.classList.remove('show');
+    // A legenda fica dentro do próprio espaço ativo (lousa ou tela).
+    document.getElementById('wbCaptions')?.classList.remove('show');
+    document.getElementById('screenCaptions')?.classList.remove('show');
+    if(lastStageSubtitle){
+      renderStageSubtitle(document.getElementById('wbCaptions'), lastStageSubtitle);
+      renderStageSubtitle(document.getElementById('screenCaptions'), lastStageSubtitle);
+    }
   }
 
   function applyStageStreamIfAvailable(){
@@ -1306,6 +1317,9 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     recognition = new SpeechRecognition();
     recognition.continuous = true;
     recognition.interimResults = false;
+    recognition.onstart = () => {
+      document.getElementById('btnStartTranslate').classList.add('active');
+    };
     recognition.lang = document.getElementById('myLang').value;
     // Chrome Android usa o prefixo webkitSpeechRecognition; manter o idioma
     // explícito evita que o celular tente reconhecer no idioma padrão do sistema.
@@ -1375,6 +1389,14 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
   });
 
   const captionTimers = {};
+  let lastStageSubtitle = null;
+  function renderStageSubtitle(target, subtitle){
+    if(!target || !subtitle) return;
+    target.querySelector('.caption-name').textContent = subtitle.name;
+    target.querySelector('.caption-original').textContent = subtitle.original;
+    target.querySelector('.caption-translated').textContent = subtitle.translated;
+    target.classList.toggle('show', (target.id === 'wbCaptions' && stageMode === 'whiteboard') || (target.id === 'screenCaptions' && stageMode === 'screenshare'));
+  }
   function showSubtitle(peerId, original, translated) {
     const name = peerId === myPeerId
       ? (myName + ' (Você)')
@@ -1389,17 +1411,15 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       captionTimers[peerId] = setTimeout(() => caption.classList.remove('show'), 6000);
     }
 
-    // Quando a lousa ou a tela compartilhada estão abertas, a grade fica oculta.
-    // Neste caso, mantemos a última tradução visível no palco para todos.
-    const stageCaptions = document.getElementById('stageCaptions');
-    if(stageCaptions){
-      stageCaptions.querySelector('.caption-name').textContent = name;
-      stageCaptions.querySelector('.caption-original').textContent = original;
-      stageCaptions.querySelector('.caption-translated').textContent = translated;
-      stageCaptions.classList.add('show');
-      clearTimeout(captionTimers.__stage);
-      captionTimers.__stage = setTimeout(() => stageCaptions.classList.remove('show'), 6000);
-    }
+    // A legenda é atualizada nas duas superfícies, mas somente a superfície
+    // atualmente aberta fica visível. Assim ela permanece dentro da lousa/tela.
+    lastStageSubtitle = { name, original, translated };
+    ['wbCaptions','screenCaptions'].forEach(id => renderStageSubtitle(document.getElementById(id), lastStageSubtitle));
+    clearTimeout(captionTimers.__stage);
+    captionTimers.__stage = setTimeout(() => {
+      document.getElementById('wbCaptions')?.classList.remove('show');
+      document.getElementById('screenCaptions')?.classList.remove('show');
+    }, 6000);
     updateTranslateBadge(peerId, true);
   }
 
