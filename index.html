@@ -214,7 +214,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       <label class="feature-row"><span>Legendas / tradução</span><input type="checkbox" id="featureTranslation" checked></label>
     </div>
 
-    <div class="translation-bar">
+    <div class="translation-bar" id="translationBar">
       <strong>🌐 Tradução Simultânea:</strong>
       <label>Eu falo:</label>
       <select id="myLang">
@@ -230,7 +230,8 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
         <option value="es">Espanhol</option>
       </select>
 
-      <button id="btnStartTranslate" style="background:var(--success); color:#fff; border:none; padding:10px 16px; border-radius:6px; cursor:pointer; font-weight:bold;">Ativar Legendas</button>
+      <button id="btnStartTranslate" style="background:var(--success); color:#fff; border:none; padding:10px 16px; border-radius:6px; cursor:pointer; font-weight:bold;">Iniciar tradução</button>
+      <div class="speech-clock" id="speechClock"><div class="speech-clock-label">Tempo de fala: <b id="speechSeconds">6.0</b>s</div><div class="speech-track"><div class="speech-fill" id="speechFill"></div></div></div>
     </div>
 
     <div class="card" style="margin-top:12px;">
@@ -345,6 +346,11 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   let recognition = null;
   let isTranslating = false;
+  const SPEECH_WINDOW_MS = 6000;
+  let speechBuffer = [];
+  let speechClockTimer = null;
+  let speechClockStartedAt = 0;
+  const DEEPL_PROXY_URL = '/api/deepl/translate';
   const isAdmin = document.documentElement.dataset.role === 'admin';
   let featureConfig = { whiteboard:true, screenShare:true, chat:true, translation:true };
   function applyFeatureConfig(){
@@ -358,6 +364,8 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     if(map.screenShare && !isScreenSharing) map.screenShare.style.display = featureConfig.screenShare && mediaStarted ? '' : 'none';
     if(map.chat) map.chat.style.display = featureConfig.chat ? '' : 'none';
     if(map.translation) map.translation.style.display = featureConfig.translation ? '' : 'none';
+    const translateButton = document.getElementById('btnStartTranslate');
+    if(translateButton) translateButton.style.display = featureConfig.translation ? '' : 'none';
   }
   function sendFeatureConfig(){ broadcastAll({ type:'feature-state', features:featureConfig }); }
   function updateFeatureConfig(){
@@ -1338,99 +1346,83 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
   }
 
 
-  /* ================= Speech recognition + translation (kept working) ================= */
-  document.getElementById('btnStartTranslate').addEventListener('click', () => {
-    if(!featureConfig.translation) return;
-    if(!SpeechRecognition) return showToast('Utilize o navegador Google Chrome no celular.');
+  /* ================= DeepL + janela de fala de 6 segundos ================= */
+  async function translateWithDeepL(text, sourceLang, targetLang){
+    const response = await fetch(DEEPL_PROXY_URL, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ text, sourceLang, targetLang })
+    });
+    if(!response.ok) throw new Error('DeepL indisponível');
+    const data = await response.json();
+    return data.translatedText || '';
+  }
 
-    if(isTranslating) {
-      if(recognition) recognition.stop();
+  function updateSpeechClock(progress){
+    const fill = document.getElementById('speechFill');
+    const seconds = document.getElementById('speechSeconds');
+    if(fill) fill.style.width = Math.max(0, Math.min(100, progress * 100)) + '%';
+    if(seconds) seconds.textContent = Math.max(0, (SPEECH_WINDOW_MS * (1-progress) / 1000)).toFixed(1);
+  }
+  function startSpeechClock(){
+    speechClockStartedAt = Date.now();
+    clearInterval(speechClockTimer);
+    speechClockTimer = setInterval(() => {
+      const progress = (Date.now() - speechClockStartedAt) / SPEECH_WINDOW_MS;
+      updateSpeechClock(progress);
+      if(progress >= 1){ clearInterval(speechClockTimer); flushSpeechWindow(); }
+    }, 100);
+  }
+  async function flushSpeechWindow(){
+    if(!speechBuffer.length) return;
+    const transcript = speechBuffer.join(' ').replace(/\s+/g,' ').trim();
+    speechBuffer = [];
+    updateSpeechClock(0);
+    const sourceLang = document.getElementById('myLang').value.split('-')[0];
+    const targetLang = document.getElementById('targetLang').value;
+    showSubtitle(myPeerId, transcript, 'traduzindo com DeepL...');
+    try{
+      const translated = await translateWithDeepL(transcript, sourceLang, targetLang);
+      showSubtitle(myPeerId, transcript, translated || 'Tradução indisponível');
+      broadcastAll({ type:'subtitle', peerId:myPeerId, original:transcript, translated:translated || 'Tradução indisponível' });
+    }catch(e){
+      showSubtitle(myPeerId, transcript, 'DeepL indisponível');
+      showToast('O servidor de tradução DeepL não respondeu.');
+    }
+  }
+
+  document.getElementById('btnStartTranslate').addEventListener('click', () => {
+    if(!SpeechRecognition) return showToast('Utilize o navegador Google Chrome.');
+    if(isTranslating){
+      try{ recognition.stop(); }catch(e){}
       isTranslating = false;
-      document.getElementById('btnStartTranslate').textContent = "Ativar Legendas";
-      document.getElementById('btnStartTranslate').style.background = "var(--success)";
-      broadcastAll({ type: 'translate-state', active: false });
+      clearInterval(speechClockTimer);
+      document.getElementById('btnStartTranslate').textContent = 'Iniciar tradução';
+      broadcastAll({ type:'translate-state', active:false });
       updateTranslateBadge(myPeerId, false);
       return;
     }
-
     isTranslating = true;
-    document.getElementById('btnStartTranslate').textContent = "Parar Legendas";
-    document.getElementById('btnStartTranslate').style.background = "var(--danger)";
-    broadcastAll({ type: 'translate-state', active: true });
+    document.getElementById('btnStartTranslate').textContent = 'Parar tradução';
+    broadcastAll({ type:'translate-state', active:true });
     updateTranslateBadge(myPeerId, true);
-
     recognition = new SpeechRecognition();
     recognition.continuous = true;
     recognition.interimResults = false;
-    recognition.onstart = () => {
-      document.getElementById('btnStartTranslate').classList.add('active');
-    };
     recognition.lang = document.getElementById('myLang').value;
-    // Chrome Android usa o prefixo webkitSpeechRecognition; manter o idioma
-    // explícito evita que o celular tente reconhecer no idioma padrão do sistema.
     recognition.maxAlternatives = 1;
-
-    recognition.onresult = async (event) => {
-      let transcript;
-      try{
-        transcript = event.results[event.results.length - 1][0].transcript.trim();
-      }catch(e){ return; }
-      if(!transcript || transcript.length < 2) return;
-
-      const targetLang = document.getElementById('targetLang').value;
-      const sourceLang = recognition.lang.split('-')[0];
-
-      // Show the original line immediately so something is always visible,
-      // even if the translation call is slow or fails (common on flaky
-      // mobile connections).
-      showSubtitle(myPeerId, transcript, 'traduzindo...');
-      broadcastAll({ type: 'subtitle', peerId: myPeerId, original: transcript, translated: '(traduzindo...)' });
-
-      try {
-        const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(transcript)}&langpair=${sourceLang}|${targetLang}`);
-        if(!res.ok) throw new Error('HTTP ' + res.status);
-        const data = await res.json();
-
-        if(data && data.responseData && data.responseData.translatedText) {
-          const translatedText = data.responseData.translatedText;
-          if(translatedText.includes("NO QUERY SPECIFIED")) return;
-
-          showSubtitle(myPeerId, transcript, translatedText);
-          broadcastAll({ type: 'subtitle', peerId: myPeerId, original: transcript, translated: translatedText });
-        } else {
-          throw new Error('Resposta inesperada do tradutor');
+    recognition.onresult = (event) => {
+      for(let i=event.resultIndex; i<event.results.length; i++){
+        if(event.results[i].isFinal){
+          const text = event.results[i][0].transcript.trim();
+          if(text.length >= 2){ speechBuffer.push(text); startSpeechClock(); }
         }
-      } catch(e) {
-        showToast('Falha ao traduzir: ' + (e && e.message ? e.message : 'erro de rede') + '. Verifique a conexão do celular.');
-        showSubtitle(myPeerId, transcript, '(tradução indisponível)');
       }
     };
-
     recognition.onerror = (e) => {
-      // 'no-speech' e 'aborted' são normais em pausas no celular.
-      if(e.error === 'no-speech' || e.error === 'aborted') return;
-      if(e.error === 'not-allowed' || e.error === 'service-not-allowed'){
-        isTranslating = false;
-        document.getElementById('btnStartTranslate').textContent = 'Ativar Legendas';
-        document.getElementById('btnStartTranslate').style.background = 'var(--success)';
-        showToast('No celular, permita o microfone e o reconhecimento de voz para traduzir.');
-        return;
-      }
-      showToast('Erro no reconhecimento de voz: ' + (e.error || 'desconhecido'));
+      if(e.error === 'not-allowed' || e.error === 'service-not-allowed') showToast('Permita o microfone para traduzir.');
     };
-
-    recognition.onend = () => {
-      if(!isTranslating || !recognition) return;
-      setTimeout(() => {
-        if(isTranslating && recognition){ try{ recognition.start(); }catch(e){} }
-      }, 250);
-    };
-    try{ recognition.start(); }catch(e){
-      isTranslating = false;
-      document.getElementById('btnStartTranslate').textContent = 'Ativar Legendas';
-      document.getElementById('btnStartTranslate').style.background = 'var(--success)';
-      showToast('Toque novamente em “Ativar Legendas” para liberar o microfone do celular.');
-    }
+    recognition.onend = () => { if(isTranslating) setTimeout(() => { try{ recognition.start(); }catch(e){} }, 250); };
+    try{ recognition.start(); }catch(e){ showToast('Toque novamente para iniciar o reconhecimento.'); }
   });
 
   const captionTimers = {};
