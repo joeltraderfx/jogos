@@ -209,10 +209,12 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     </div>
     <div class="feature-card" id="adminFeatures">
       <h3>RECURSOS DA SALA</h3>
+      <label class="feature-row"><span>Áudio</span><input type="checkbox" id="featureAudio" checked></label>
+      <label class="feature-row"><span>Vídeo</span><input type="checkbox" id="featureVideo" checked></label>
+      <label class="feature-row"><span>Chat</span><input type="checkbox" id="featureChat" checked></label>
+      <label class="feature-row"><span>Tradução</span><input type="checkbox" id="featureTranslation" checked></label>
+      <label class="feature-row"><span>Compartilhar tela</span><input type="checkbox" id="featureScreenShare" checked></label>
       <label class="feature-row"><span>Lousa</span><input type="checkbox" id="featureWhiteboard" checked></label>
-      <label class="feature-row"><span>Compartilhamento de tela</span><input type="checkbox" id="featureScreenShare" checked></label>
-      <label class="feature-row"><span>Mensagens de texto</span><input type="checkbox" id="featureChat" checked></label>
-      <label class="feature-row"><span>Legendas / tradução</span><input type="checkbox" id="featureTranslation" checked></label>
     </div>
 
     <div class="translation-bar" id="translationBar">
@@ -355,28 +357,40 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
   let speechClockStartedAt = 0;
   const DEEPL_PROXY_URL = '/api/deepl/translate';
   const isAdmin = document.documentElement.dataset.role === 'admin';
-  let featureConfig = { whiteboard:true, screenShare:true, chat:true, translation:true };
+  let featureConfig = { audio:true, video:true, chat:true, translation:true, screenShare:true, whiteboard:true };
   function applyFeatureConfig(){
     const map = {
       whiteboard: document.getElementById('btnWhiteboard'),
       screenShare: document.getElementById('btnScreenShare'),
       chat: document.getElementById('chatFab'),
-      translation: document.getElementById('translationBar')
+      translation: document.getElementById('translationBar'),
+      audio: document.getElementById('btnToggleMic'),
+      video: document.getElementById('btnToggleCam'),
+      media: document.getElementById('btnStartMedia')
     };
     if(map.whiteboard) map.whiteboard.style.display = featureConfig.whiteboard ? '' : 'none';
     if(map.screenShare && !isScreenSharing) map.screenShare.style.display = featureConfig.screenShare && mediaStarted ? '' : 'none';
     if(map.chat) map.chat.style.display = featureConfig.chat ? '' : 'none';
     if(map.translation) map.translation.style.display = featureConfig.translation ? '' : 'none';
+    if(map.audio) map.audio.style.display = featureConfig.audio && mediaStarted ? '' : 'none';
+    if(map.video) map.video.style.display = featureConfig.video && mediaStarted ? '' : 'none';
+    if(map.media) map.media.style.display = (!mediaStarted && (featureConfig.audio || featureConfig.video)) ? '' : 'none';
     const translateButton = document.getElementById('btnStartTranslate');
     if(translateButton) translateButton.style.display = featureConfig.translation ? '' : 'none';
+    if(!featureConfig.audio && localStream) localStream.getAudioTracks().forEach(track => { track.enabled = false; track.stop(); });
+    if(!featureConfig.video && localStream) localStream.getVideoTracks().forEach(track => { track.enabled = false; track.stop(); });
+    if(!featureConfig.chat){ document.getElementById('chatPanel')?.classList.remove('show'); }
+    if(!featureConfig.translation && isTranslating){ try{ recognition?.stop(); }catch(e){} isTranslating = false; }
   }
   function sendFeatureConfig(){ broadcastAll({ type:'feature-state', features:featureConfig }); }
   function updateFeatureConfig(){
     featureConfig = {
-      whiteboard: document.getElementById('featureWhiteboard')?.checked !== false,
-      screenShare: document.getElementById('featureScreenShare')?.checked !== false,
+      audio: document.getElementById('featureAudio')?.checked !== false,
+      video: document.getElementById('featureVideo')?.checked !== false,
       chat: document.getElementById('featureChat')?.checked !== false,
-      translation: document.getElementById('featureTranslation')?.checked !== false
+      translation: document.getElementById('featureTranslation')?.checked !== false,
+      screenShare: document.getElementById('featureScreenShare')?.checked !== false,
+      whiteboard: document.getElementById('featureWhiteboard')?.checked !== false
     };
     applyFeatureConfig(); sendFeatureConfig();
   }
@@ -418,7 +432,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     startRoom(code);
   });
 
-  if(isAdmin){ ['featureWhiteboard','featureScreenShare','featureChat','featureTranslation'].forEach(id => document.getElementById(id)?.addEventListener('change', updateFeatureConfig)); }
+  if(isAdmin){ ['featureAudio','featureVideo','featureChat','featureTranslation','featureScreenShare','featureWhiteboard'].forEach(id => document.getElementById(id)?.addEventListener('change', updateFeatureConfig)); }
   if(!isAdmin){ const inviteRoom = new URLSearchParams(window.location.search).get('room'); if(inviteRoom && /^\d{4}$/.test(inviteRoom)) document.getElementById('roomCodeInput').value = inviteRoom; }
 
   function startRoom(code) {
@@ -737,12 +751,13 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
   /* ================= Media ================= */
   document.getElementById('btnStartMedia').addEventListener('click', async () => {
     try {
-      localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      if(!featureConfig.audio && !featureConfig.video) return showToast('O administrador desativou áudio e vídeo.');
+      localStream = await navigator.mediaDevices.getUserMedia({ video: featureConfig.video, audio: featureConfig.audio });
       mediaStarted = true;
       addVideoFeed(myPeerId, myName + ' (Você)', localStream, true);
       document.getElementById('btnStartMedia').style.display = 'none';
-      document.getElementById('btnToggleMic').style.display = '';
-      document.getElementById('btnToggleCam').style.display = '';
+      document.getElementById('btnToggleMic').style.display = featureConfig.audio ? '' : 'none';
+      document.getElementById('btnToggleCam').style.display = featureConfig.video ? '' : 'none';
       document.getElementById('btnScreenShare').style.display = featureConfig.screenShare ? '' : 'none';
 
       // Recover connections that were answered before we had media (they'd
@@ -762,6 +777,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
   });
 
   document.getElementById('btnToggleMic').addEventListener('click', () => {
+    if(!featureConfig.audio) return;
     if(!localStream) return;
     micEnabled = !micEnabled;
     localStream.getAudioTracks().forEach(t => t.enabled = micEnabled);
@@ -772,6 +788,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
   });
 
   document.getElementById('btnToggleCam').addEventListener('click', () => {
+    if(!featureConfig.video) return;
     if(!localStream) return;
     camEnabled = !camEnabled;
     localStream.getVideoTracks().forEach(t => t.enabled = camEnabled);
