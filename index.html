@@ -78,7 +78,7 @@ h1 { font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.05em; text-align: 
   .video-caption .caption-original{ color:#e6e2da; font-size:12px; line-height:1.25; }
   .video-caption .caption-translated{ color:var(--gold-bright); font-weight:700; font-size:16px; line-height:1.25; margin-top:3px; overflow-wrap:anywhere; }
   .mobile-caption-fallback{ display:none; margin:10px 0 0; padding:9px 11px; border-radius:9px; background:rgba(8,9,13,.94); border:1px solid var(--gold); text-align:center; }
-  .mobile-caption-fallback.show{ display:block; }
+  .mobile-caption-fallback.show{ display:none; }
   .mobile-caption-fallback .caption-name{ color:var(--gold-bright); font-size:10px; font-weight:700; text-transform:uppercase; }
   .mobile-caption-fallback .caption-original{ color:#e6e2da; font-size:12px; margin-top:3px; }
   .mobile-caption-fallback .caption-translated{ color:var(--gold-bright); font-weight:700; font-size:16px; margin-top:3px; }
@@ -1434,7 +1434,10 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       broadcastAll({ type: 'subtitle', peerId: myPeerId, original: transcript, translated: '(traduzindo...)' });
 
       try {
-        const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(transcript)}&langpair=${sourceLang}|${targetLang}`);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 8000);
+        const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(transcript)}&langpair=${sourceLang}|${targetLang}`, { signal: controller.signal });
+        clearTimeout(timeoutId);
         if(!res.ok) throw new Error('HTTP ' + res.status);
         const data = await res.json();
 
@@ -1448,7 +1451,8 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
           throw new Error('Resposta inesperada do tradutor');
         }
       } catch(e) {
-        showToast('Falha ao traduzir: ' + (e && e.message ? e.message : 'erro de rede') + '. Verifique a conexão do celular.');
+        const message = e && e.name === 'AbortError' ? 'tempo esgotado' : (e && e.message ? e.message : 'erro de rede');
+        showToast('Falha ao traduzir: ' + message + '.');
         showSubtitle(myPeerId, transcript, '(tradução indisponível)');
       }
     };
