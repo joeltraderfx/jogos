@@ -172,6 +172,15 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
 .feature-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;border-top:1px solid rgba(255,255,255,.06);font-size:13px;}
 .feature-row:first-of-type{border-top:0;}
 .feature-row input{width:18px;height:18px;accent-color:var(--gold);}
+
+.invite-card{background:var(--panel-2);border:1px solid var(--success);border-radius:10px;padding:12px;margin-top:10px;}
+.invite-card h3{margin:0 0 8px;color:var(--success);font-size:13px;}
+.invite-link{width:100%;background:#08090d;border:1px solid var(--border);color:var(--cream);padding:10px;border-radius:8px;font-size:12px;}
+.invite-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;}
+.invite-actions button{border:0;border-radius:7px;padding:9px 12px;font-weight:700;cursor:pointer;color:#fff;background:var(--info);}
+.invite-actions button.whatsapp{background:#1f9d55;}
+.invite-actions button.email{background:#6b5bd6;}
+
 </style>
 </head>
 <body>
@@ -186,7 +195,6 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     <p class="helper">Digite somente o seu nome para entrar na sala recebida por convite.</p>
     <label style="font-size:13px;color:var(--cream-dim);">SEU NOME</label>
     <input class="text-input" id="userNameInput" placeholder="Digite seu nome" maxlength="20">
-    <input class="text-input" id="roomPasswordInput" type="password" placeholder="Senha da sala" minlength="4" maxlength="64" autocomplete="current-password">
     <input id="roomCodeInput" type="hidden">
     <div class="btn-group"><button class="big-btn primary" id="btnJoin">Entrar na Sala</button></div>
   </div>
@@ -408,19 +416,13 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
   /* ================= Entry ================= */
   if(document.getElementById('btnCreate')) document.getElementById('btnCreate').addEventListener('click', () => {
     const code = roomCodeInput ? (roomCodeInput.value.trim() || Math.floor(1000 + Math.random() * 9000).toString()) : Math.floor(1000 + Math.random() * 9000).toString();
-    const password = document.getElementById('roomPasswordInput').value.trim();
-    if(password.length < 4) return showToast('Crie uma senha com pelo menos 4 caracteres.');
-    roomPassword = password;
     isHost = true;
     startRoom(code);
   });
 
   if(document.getElementById('btnJoin')) document.getElementById('btnJoin').addEventListener('click', () => {
     const code = roomCodeInput.value.trim();
-    const password = document.getElementById('roomPasswordInput').value.trim();
     if(code.length !== 4) return showToast('O link da sala não contém uma chave válida.');
-    if(password.length < 4) return showToast('Digite a senha da sala.');
-    roomPassword = password;
     isHost = false;
     startRoom(code);
   });
