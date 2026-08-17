@@ -77,14 +77,6 @@ h1 { font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.05em; text-align: 
   .video-caption .caption-name{ color:var(--gold-bright); font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; margin-bottom:3px; }
   .video-caption .caption-original{ color:#e6e2da; font-size:12px; line-height:1.25; }
   .video-caption .caption-translated{ color:var(--gold-bright); font-weight:700; font-size:16px; line-height:1.25; margin-top:3px; overflow-wrap:anywhere; }
-  
-  /* Fallback visível para celular */
-  .mobile-caption-fallback{ display:none; margin:10px 0 0; padding:9px 11px; border-radius:9px; background:rgba(8,9,13,.94); border:1px solid var(--gold); text-align:center; }
-  .mobile-caption-fallback.show{ display:block; }
-  .mobile-caption-fallback .caption-name{ color:var(--gold-bright); font-size:10px; font-weight:700; text-transform:uppercase; }
-  .mobile-caption-fallback .caption-original{ color:#e6e2da; font-size:12px; margin-top:3px; }
-  .mobile-caption-fallback .caption-translated{ color:var(--gold-bright); font-weight:700; font-size:16px; margin-top:3px; }
-  
   .global-captions{ display:none; }
   .stage-captions{ position:absolute; left:12px; right:12px; bottom:12px; padding:10px 14px; border-radius:11px; background:rgba(8,9,13,.94); border:1px solid var(--gold); z-index:8; opacity:0; transform:translateY(10px); pointer-events:none; transition:opacity .2s, transform .2s; text-align:center; box-shadow:0 8px 24px rgba(0,0,0,.45); }
   .stage-captions.show{ opacity:1; transform:translateY(0); }
@@ -135,7 +127,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
 .chat-input-row input{ flex:1; background:var(--panel); border:1px solid var(--border); color:var(--cream); border-radius:20px; padding:9px 14px; font-size:13px;}
 .chat-input-row button{ background:var(--gold); border:none; color:#1a1200; border-radius:20px; padding:0 16px; font-weight:700; font-size:13px; cursor:pointer;}
 
-/* ---------- whiteboard ---------- */
+/* ---------- whiteboard (appears in place of the video grid, synced for everyone) ---------- */
 .wb-panel{ display:none; flex-direction:column; margin-top:10px; border-radius:10px; overflow:hidden; border:1.5px solid var(--border); }
 .wb-panel.show{ display:flex; }
 .wb-toolbar{ display:flex; gap:8px; align-items:center; padding:10px 12px; background:var(--panel-2); border-bottom:1px solid var(--border); flex-wrap:wrap; }
@@ -209,9 +201,8 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
         <button class="tool-btn" id="btnToggleMic" style="display:none;">🎤 Mic</button>
         <button class="tool-btn" id="btnToggleCam" style="display:none;">📹 Câmera</button>
         <button class="tool-btn" id="btnScreenShare" style="display:none;">🖥️ Compartilhar tela</button>
-        <button class="tool-btn" id="btnEnableAudio" style="display:none;">🔊 Ativar áudio</button>
         <button class="tool-btn" id="btnWhiteboard">✏️ Lousa</button>
-      </div>
+        </div>
     </div>
 
     <div class="translation-bar">
@@ -236,11 +227,6 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     <div class="card" style="margin-top:12px;">
       <h3 style="margin:0 0 8px; font-size:15px; text-align:left; color:var(--cream-dim);">PARTICIPANTES NA SALA</h3>
       <div class="video-grid" id="videoGrid"></div>
-      <div class="mobile-caption-fallback" id="mobileCaptionFallback" aria-live="polite">
-        <div class="caption-name"></div>
-        <div class="caption-original"></div>
-        <div class="caption-translated"></div>
-      </div>
 
       <div class="wb-panel" id="wbPanel">
         <div class="wb-toolbar">
@@ -289,7 +275,6 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
           <div class="caption-translated"></div>
         </div>
       </div>
-      <div id="audioPlayers" aria-hidden="true"></div>
     </div>
   </section>
 </div>
@@ -334,17 +319,15 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
   let camEnabled = true;
   let isScreenSharing = false;
   let mediaStarted = false;
-  let stageMode = 'grid'; 
-  let presentingPeerId = null;
-  const peerStreams = {}; 
-  const remoteAudioElements = {}; 
-  const isMobileDevice = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
+  let stageMode = 'grid'; // 'grid' | 'whiteboard' | 'screenshare' — what the main area shows
+  let presentingPeerId = null; // who is currently screen-sharing (broadcast to everyone)
+  const peerStreams = {}; // peerId -> MediaStream, so the stage can grab any peer's video on demand
 
-  const participants = {};   
-  const activeConns = {};    
-  const activeCalls = {};    
-  const myInitiatedConns = new Set(); 
-  let wbShapes = [];         
+  const participants = {};   // peerId -> { name, isHost, muted }
+  const activeConns = {};    // peerId -> DataConnection
+  const activeCalls = {};    // peerId -> MediaConnection
+  const myInitiatedConns = new Set(); // peerIds whose data connection we opened
+  let wbShapes = [];         // shared whiteboard shapes
 
   const userNameInput = document.getElementById('userNameInput');
   const roomCodeInput = document.getElementById('roomCodeInput');
@@ -398,10 +381,10 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       document.getElementById('screen-home').classList.remove('active');
       document.getElementById('screen-room').classList.add('active');
       document.getElementById('chatFab').classList.add('show');
-      document.getElementById('btnEnableAudio').style.display = '';
       renderParticipantsList();
 
       if(!isHost){
+        // Bootstrap: the only peer id a newcomer knows in advance is the host's.
         connectToPeer(hostPeerId, true);
       }
     });
@@ -410,6 +393,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       if(err.type === 'unavailable-id') {
         showToast('Essa sala já foi criada! Clique em "Entrar na Sala".');
       } else if(err.type === 'peer-unavailable') {
+        // A peer we tried to reach is gone — clean up quietly.
       } else {
         console.error('Peer error', err);
       }
@@ -422,15 +406,26 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     peer.on('call', (call) => {
       const streamToSend = isScreenSharing ? screenStream : localStream;
       call.answer(streamToSend || undefined);
-      if(!streamToSend) call._answeredEmpty = true;
+      if(!streamToSend) call._answeredEmpty = true; // no camera/mic yet — recover once media starts
       registerCall(call.peer, call);
     });
   }
 
+  /* ================= Mesh connection management =================
+     Every peer that ARRIVES only knows the fixed host id in advance.
+     The host keeps the authoritative participant roster and, whenever
+     someone joins, (a) sends them the full roster + whiteboard state,
+     and (b) broadcasts their arrival to everyone already connected.
+     Each peer then connects directly to every OTHER peer it learns
+     about, using a simple rule (lower peer id initiates) so exactly
+     one side opens the connection — this is what makes it a full
+     mesh instead of "everyone only sees the host".
+  ================================================================== */
+
   function connectToPeer(otherId, force){
     if(!otherId || otherId === myPeerId) return;
-    if(activeConns[otherId]) return;
-    if(!force && !(myPeerId < otherId)) return;
+    if(activeConns[otherId]) return; // already connected/connecting
+    if(!force && !(myPeerId < otherId)) return; // the other side is responsible for initiating
     const conn = peer.connect(otherId, { reliable: true });
     myInitiatedConns.add(otherId);
     setupConnection(conn);
@@ -449,7 +444,6 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     call.on('stream', (remoteStream) => {
       const name = (participants[otherId] && participants[otherId].name) || 'Participante';
       peerStreams[otherId] = remoteStream;
-      attachRemoteAudio(otherId, remoteStream);
       addVideoFeed(otherId, name, remoteStream);
       if(otherId === presentingPeerId) applyStageStreamIfAvailable();
     });
@@ -457,11 +451,13 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     call.on('error', () => {});
   }
 
+  /* ---- unified "stage": grid vs whiteboard vs screen-share, shared for everyone ---- */
   function setStageMode(mode){
     stageMode = mode;
     videoGrid.style.display = mode === 'grid' ? '' : 'none';
     wbPanel.classList.toggle('show', mode === 'whiteboard');
     document.getElementById('stageScreenshare').classList.toggle('show', mode === 'screenshare');
+    // A legenda fica dentro do próprio espaço ativo (lousa ou tela).
     document.getElementById('wbCaptions')?.classList.remove('show');
     document.getElementById('screenCaptions')?.classList.remove('show');
     if(lastStageSubtitle){
@@ -474,12 +470,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     if(stageMode !== 'screenshare' || !presentingPeerId) return;
     const stream = presentingPeerId === myPeerId ? screenStream : peerStreams[presentingPeerId];
     const label = presentingPeerId === myPeerId ? 'Você está compartilhando a tela' : (peerNameFor(presentingPeerId) + ' está compartilhando a tela');
-    if(stream){
-      const stageVideo = document.getElementById('stageVideo');
-      stageVideo.srcObject = stream;
-      stageVideo.muted = isMobileDevice;
-      stageVideo.play().catch(() => {});
-    }
+    if(stream) document.getElementById('stageVideo').srcObject = stream;
     document.getElementById('stageLabel').textContent = label;
   }
 
@@ -494,6 +485,9 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       if(isHost){
         conn.send({ type: 'roster', participants: getRosterList(), wbShapes: wbShapes });
       }
+      // Only the side that opened this data connection also places the media
+      // call — the other side just answers. If both sides called each other
+      // we'd end up with two redundant peer connections for the same pair.
       if(myInitiatedConns.has(conn.peer)){
         callPeer(conn.peer);
       }
@@ -619,6 +613,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       case 'translate-state':
         updateTranslateBadge(fromId, !!data.active);
         break;
+
     }
   }
 
@@ -638,13 +633,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     myInitiatedConns.delete(peerId);
     delete participants[peerId];
     delete translateActiveState[peerId];
-    delete lastSubtitles[peerId];
     delete peerStreams[peerId];
-    if(remoteAudioElements[peerId]){
-      remoteAudioElements[peerId].srcObject = null;
-      remoteAudioElements[peerId].remove();
-      delete remoteAudioElements[peerId];
-    }
     if(presentingPeerId === peerId){
       presentingPeerId = null;
       if(stageMode === 'screenshare') setStageMode('grid');
@@ -666,8 +655,10 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       document.getElementById('btnToggleMic').style.display = '';
       document.getElementById('btnToggleCam').style.display = '';
       document.getElementById('btnScreenShare').style.display = '';
-      document.getElementById('btnEnableAudio').style.display = '';
 
+      // Recover connections that were answered before we had media (they'd
+      // never receive our video/audio otherwise), and call anyone we have a
+      // data connection with but no media call yet.
       Object.keys(activeConns).forEach(id => {
         const existing = activeCalls[id];
         if(existing && existing._answeredEmpty){
@@ -709,6 +700,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     updateMicIndicator(myPeerId, true);
   }
 
+  /* ---- screen sharing (swaps the outgoing video track on every call) ---- */
   document.getElementById('btnScreenShare').addEventListener('click', async () => {
     if(!isScreenSharing){
       if(presentingPeerId && presentingPeerId !== myPeerId){
@@ -725,7 +717,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       updateVideoFeedStream(myPeerId, screenStream);
       document.getElementById('btnScreenShare').textContent = '🛑 Parar compartilhamento';
       document.getElementById('btnScreenShare').classList.add('active');
-      screenTrack.onended = stopScreenShare;
+      screenTrack.onended = stopScreenShare; // user clicked the browser's own "Stop sharing"
 
       presentingPeerId = myPeerId;
       setStageMode('screenshare');
@@ -774,15 +766,8 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     card.id = 'vcard-' + id;
 
     const video = document.createElement('video');
-    video.autoplay = true; video.playsInline = true; video.controls = false; video.muted = isMobileDevice ? true : !!isMuted;
-    video.setAttribute('webkit-playsinline', 'true');
+    video.autoplay = true; video.playsInline = true; video.muted = !!isMuted;
     video.srcObject = stream;
-    if(!isMuted && !isMobileDevice){
-      video.addEventListener('loadedmetadata', () => {
-        video.muted = false;
-        video.play().catch(() => {});
-      }, { once:true });
-    }
 
     const tag = document.createElement('div');
     tag.className = 'tag'; tag.id = 'tag-' + id;
@@ -806,13 +791,6 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
 
     videoGrid.appendChild(card);
     if(translateActiveState[id]) updateTranslateBadge(id, true);
-    if(lastSubtitles[id]){
-      const saved = lastSubtitles[id];
-      caption.querySelector('.caption-name').textContent = saved.name;
-      caption.querySelector('.caption-original').textContent = saved.original;
-      caption.querySelector('.caption-translated').textContent = saved.translated;
-      caption.classList.add('show');
-    }
     updateParticipantCount();
   }
 
@@ -820,49 +798,8 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     const card = document.getElementById('vcard-' + id);
     if(!card) return;
     const video = card.querySelector('video');
-    if(video){
-      video.srcObject = stream;
-      if(id !== myPeerId){
-        video.muted = isMobileDevice;
-        video.play().catch(() => {
-          if(isMobileDevice) document.getElementById('btnEnableAudio').style.display = '';
-        });
-      }
-    }
+    if(video) video.srcObject = stream;
   }
-
-  function attachRemoteAudio(peerId, stream){
-    let audio = remoteAudioElements[peerId];
-    if(!audio){
-      audio = document.createElement('audio');
-      audio.id = 'audio-' + peerId;
-      audio.autoplay = true;
-      audio.controls = false;
-      audio.volume = 1;
-      document.getElementById('audioPlayers').appendChild(audio);
-      remoteAudioElements[peerId] = audio;
-    }
-    audio.srcObject = stream;
-    audio.muted = !audioUnlocked;
-    if(audioUnlocked) audio.play().catch(() => {});
-  }
-
-  let audioUnlocked = false;
-  function unlockRemoteAudio(){
-    audioUnlocked = true;
-    Object.values(remoteAudioElements).forEach(audio => {
-      audio.muted = false;
-      audio.volume = 1;
-      audio.play().catch(() => {});
-    });
-    document.getElementById('stageVideo').muted = isMobileDevice;
-    document.getElementById('stageVideo').play().catch(() => {});
-    document.getElementById('btnEnableAudio').textContent = '🔊 Áudio ativo';
-    document.getElementById('btnEnableAudio').classList.add('active');
-    document.getElementById('btnEnableAudio').style.display = '';
-  }
-
-  document.getElementById('btnEnableAudio').addEventListener('click', unlockRemoteAudio);
 
   function removeVideoFeed(id){
     const card = document.getElementById('vcard-' + id);
@@ -880,7 +817,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     if(el) el.style.display = muted ? '' : 'none';
   }
 
-  const translateActiveState = {}; 
+  const translateActiveState = {}; // peerId -> bool, so badges survive tile re-creation
   function updateTranslateBadge(id, active){
     translateActiveState[id] = active;
     const el = document.getElementById('translateon-' + id);
@@ -896,7 +833,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   }
 
-  /* ---- host tools ---- */
+  /* ---- host tools: mute / kick ---- */
   videoGrid.addEventListener('click', (e)=>{
     const muteBtn = e.target.closest('.mute-btn');
     const kickBtn = e.target.closest('.kick-btn');
@@ -949,17 +886,12 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     document.getElementById('btnToggleMic').style.display = 'none';
     document.getElementById('btnToggleCam').style.display = 'none';
     document.getElementById('btnScreenShare').style.display = 'none';
-    document.getElementById('btnEnableAudio').style.display = 'none';
     for(const k in participants) delete participants[k];
     for(const k in activeConns) delete activeConns[k];
     for(const k in activeCalls) delete activeCalls[k];
     for(const k in peerStreams) delete peerStreams[k];
-    Object.values(remoteAudioElements).forEach(audio => { audio.srcObject = null; audio.remove(); });
-    for(const k in remoteAudioElements) delete remoteAudioElements[k];
     myInitiatedConns.clear();
     for(const k in translateActiveState) delete translateActiveState[k];
-    for(const k in lastSubtitles) delete lastSubtitles[k];
-    lastStageSubtitle = null;
     isTranslating = false;
     if(recognition){ try{ recognition.stop(); }catch(e){} recognition = null; }
     document.getElementById('btnStartTranslate').textContent = "Ativar Legendas";
@@ -1060,7 +992,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
   let wbPreview = null;
   let wbOpenState = false;
   let wbSelectedId = null;
-  let wbDragOffset = null; 
+  let wbDragOffset = null; // {dnx, dny} while dragging a selected shape
   let wbShapeIdCounter = 0;
 
   function nextShapeId(){ return myPeerId + '_' + Date.now() + '_' + (wbShapeIdCounter++); }
@@ -1075,6 +1007,9 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     if(open){ sizeWhiteboardCanvas(); redrawWhiteboard(); } else { selectShape(null); }
     if(shouldBroadcast){ broadcastAll({ type: open ? 'wb-open' : 'wb-close' }); }
   }
+
+  // The whiteboard is a shared teaching tool: whoever opens or closes it
+  // switches the view for the whole room, like screen sharing does.
 
   document.getElementById('btnWhiteboard').addEventListener('click', ()=>{
     setWhiteboardOpen(!wbOpenState, true);
@@ -1141,6 +1076,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     if(s.tool === 'rect' || s.tool === 'circle'){
       return px >= Math.min(x1,x2)-pad && px <= Math.max(x1,x2)+pad && py >= Math.min(y1,y2)-pad && py <= Math.max(y1,y2)+pad;
     }
+    // lines / arrow / hline / vline / dline: distance from point to segment
     const distToSeg = distPointToSegment(px, py, x1, y1, x2, y2);
     return distToSeg <= pad;
   }
@@ -1221,6 +1157,8 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       if(text){
         const shape = { id: nextShapeId(), tool:'text', x1:p.nx, y1:p.ny, color: wbColor, text: text.slice(0,120), fontSize: 20, bold:false, underline:false };
         wbShapes.push(shape); redrawWhiteboard(); broadcastAll({ type:'draw', shape });
+        // Auto-select so it's easy to move/format right after creating it —
+        // this is also how overlapping text gets fixed: drag it apart.
         document.querySelector('.wb-toolbar [data-tool="select"]').click();
         selectShape(shape.id);
       }
@@ -1355,7 +1293,8 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     wbCtx.restore();
   }
 
-  /* ================= Speech recognition + translation (FIXED FOR MOBILE) ================= */
+
+  /* ================= Speech recognition + translation (kept working) ================= */
   document.getElementById('btnStartTranslate').addEventListener('click', () => {
     if(!SpeechRecognition) return showToast('Utilize o navegador Google Chrome no celular.');
 
@@ -1376,38 +1315,34 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     updateTranslateBadge(myPeerId, true);
 
     recognition = new SpeechRecognition();
-    // Continuous mode works great on desktop but frequently never fires a
-    // result at all on Android Chrome — so only mobile gets the "one
-    // utterance at a time, auto-restart" workaround.
-    recognition.continuous = !isMobileDevice;
-    recognition.interimResults = isMobileDevice;
-    recognition.lang = document.getElementById('myLang').value;
-    recognition.maxAlternatives = 1;
-
+    recognition.continuous = true;
+    recognition.interimResults = false;
     recognition.onstart = () => {
       document.getElementById('btnStartTranslate').classList.add('active');
     };
+    recognition.lang = document.getElementById('myLang').value;
+    // Chrome Android usa o prefixo webkitSpeechRecognition; manter o idioma
+    // explícito evita que o celular tente reconhecer no idioma padrão do sistema.
+    recognition.maxAlternatives = 1;
 
     recognition.onresult = async (event) => {
-      const result = event.results[event.results.length - 1];
-      if(isMobileDevice && !result.isFinal) return; // mobile: wait for the finalized utterance
       let transcript;
       try{
-        transcript = result[0].transcript.trim();
+        transcript = event.results[event.results.length - 1][0].transcript.trim();
       }catch(e){ return; }
       if(!transcript || transcript.length < 2) return;
 
       const targetLang = document.getElementById('targetLang').value;
       const sourceLang = recognition.lang.split('-')[0];
 
+      // Show the original line immediately so something is always visible,
+      // even if the translation call is slow or fails (common on flaky
+      // mobile connections).
       showSubtitle(myPeerId, transcript, 'traduzindo...');
       broadcastAll({ type: 'subtitle', peerId: myPeerId, original: transcript, translated: '(traduzindo...)' });
 
       try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 8000);
-        const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(transcript)}&langpair=${sourceLang}|${targetLang}`, { signal: controller.signal });
-        clearTimeout(timeoutId);
+        const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(transcript)}&langpair=${sourceLang}|${targetLang}`);
         if(!res.ok) throw new Error('HTTP ' + res.status);
         const data = await res.json();
 
@@ -1421,13 +1356,13 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
           throw new Error('Resposta inesperada do tradutor');
         }
       } catch(e) {
-        const message = e && e.name === 'AbortError' ? 'tempo esgotado' : (e && e.message ? e.message : 'erro de rede');
-        showToast('Falha ao traduzir: ' + message + '.');
+        showToast('Falha ao traduzir: ' + (e && e.message ? e.message : 'erro de rede') + '. Verifique a conexão do celular.');
         showSubtitle(myPeerId, transcript, '(tradução indisponível)');
       }
     };
 
     recognition.onerror = (e) => {
+      // 'no-speech' e 'aborted' são normais em pausas no celular.
       if(e.error === 'no-speech' || e.error === 'aborted') return;
       if(e.error === 'not-allowed' || e.error === 'service-not-allowed'){
         isTranslating = false;
@@ -1445,35 +1380,15 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
         if(isTranslating && recognition){ try{ recognition.start(); }catch(e){} }
       }, 250);
     };
-
-    const startRecognition = () => {
-      try{ recognition.start(); }
-      catch(e){
-        isTranslating = false;
-        document.getElementById('btnStartTranslate').textContent = 'Ativar Legendas';
-        document.getElementById('btnStartTranslate').style.background = 'var(--success)';
-        showToast('Toque novamente em “Ativar Legendas” para liberar o microfone do celular.');
-      }
-    };
-
-    if(!localStream && navigator.mediaDevices && navigator.mediaDevices.getUserMedia){
-      navigator.mediaDevices.getUserMedia({ audio:true }).then(stream => {
-        localStream = stream;
-        mediaStarted = true;
-        startRecognition();
-      }).catch(() => {
-        isTranslating = false;
-        document.getElementById('btnStartTranslate').textContent = 'Ativar Legendas';
-        document.getElementById('btnStartTranslate').style.background = 'var(--success)';
-        showToast('Permita o microfone nas configurações do navegador do celular.');
-      });
-    } else {
-      startRecognition();
+    try{ recognition.start(); }catch(e){
+      isTranslating = false;
+      document.getElementById('btnStartTranslate').textContent = 'Ativar Legendas';
+      document.getElementById('btnStartTranslate').style.background = 'var(--success)';
+      showToast('Toque novamente em “Ativar Legendas” para liberar o microfone do celular.');
     }
   });
 
   const captionTimers = {};
-  const lastSubtitles = {}; 
   let lastStageSubtitle = null;
   function renderStageSubtitle(target, subtitle){
     if(!target || !subtitle) return;
@@ -1482,13 +1397,10 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     target.querySelector('.caption-translated').textContent = subtitle.translated;
     target.classList.toggle('show', (target.id === 'wbCaptions' && stageMode === 'whiteboard') || (target.id === 'screenCaptions' && stageMode === 'screenshare'));
   }
-  
   function showSubtitle(peerId, original, translated) {
     const name = peerId === myPeerId
       ? (myName + ' (Você)')
       : ((participants[peerId] && participants[peerId].name) || 'Alguém');
-    original = String(original || '');
-    translated = String(translated || '(tradução indisponível)');
     const caption = document.getElementById('caption-' + peerId);
     if(caption){
       caption.querySelector('.caption-name').textContent = name;
@@ -1499,18 +1411,9 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       captionTimers[peerId] = setTimeout(() => caption.classList.remove('show'), 6000);
     }
 
-    const mobileFallback = document.getElementById('mobileCaptionFallback');
-    if(mobileFallback){
-      mobileFallback.querySelector('.caption-name').textContent = name;
-      mobileFallback.querySelector('.caption-original').textContent = original;
-      mobileFallback.querySelector('.caption-translated').textContent = translated;
-      mobileFallback.classList.add('show');
-      clearTimeout(captionTimers.__mobile);
-      captionTimers.__mobile = setTimeout(() => mobileFallback.classList.remove('show'), 6000);
-    }
-
-    lastSubtitles[peerId] = { name, original, translated };
-    lastStageSubtitle = lastSubtitles[peerId];
+    // A legenda é atualizada nas duas superfícies, mas somente a superfície
+    // atualmente aberta fica visível. Assim ela permanece dentro da lousa/tela.
+    lastStageSubtitle = { name, original, translated };
     ['wbCaptions','screenCaptions'].forEach(id => renderStageSubtitle(document.getElementById(id), lastStageSubtitle));
     clearTimeout(captionTimers.__stage);
     captionTimers.__stage = setTimeout(() => {
