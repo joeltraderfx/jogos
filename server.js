@@ -49,6 +49,45 @@ app.post('/api/checkout', async (req, res) => {
   }
 });
 
+// TEMPORÁRIO — só para diagnosticar o problema de autenticação com o
+// PagBank. Mostra (mascarado) qual token o servidor está realmente usando e
+// a resposta crua do PagBank para uma chamada de teste real. Remover depois
+// que o pagamento estiver funcionando — não deixar endpoints de diagnóstico
+// expostos publicamente em produção por mais tempo do que o necessário.
+app.get('/api/pagbank-debug', async (req, res) => {
+  const token = process.env.PAGBANK_TOKEN || '';
+  const masked = token ? `${token.slice(0, 8)}...${token.slice(-6)} (comprimento: ${token.length})` : '(vazio — variável não configurada)';
+
+  let pagbankResult;
+  try {
+    const baseUrl = process.env.PAGBANK_ENV === 'production' ? 'https://api.pagseguro.com' : 'https://sandbox.api.pagseguro.com';
+    const testRes = await fetch(`${baseUrl}/checkouts`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        reference_id: 'diagnostico-' + Date.now(),
+        items: [{ name: 'Diagnóstico', quantity: 1, unit_amount: 1000 }],
+      }),
+    });
+    const bodyText = await testRes.text();
+    let parsedBody;
+    try { parsedBody = JSON.parse(bodyText); } catch (e) { parsedBody = bodyText; }
+    pagbankResult = { httpStatus: testRes.status, body: parsedBody };
+  } catch (e) {
+    pagbankResult = { error: 'Falha de rede ao chamar o PagBank: ' + e.message };
+  }
+
+  res.json({
+    ambiente: process.env.PAGBANK_ENV || '(não configurado, usando sandbox por padrão)',
+    tokenMascarado: masked,
+    publicBaseUrl: publicBaseUrl(req),
+    respostaDoPagBank: pagbankResult,
+  });
+});
+
 app.post('/api/pagbank/webhook', (req, res) => {
   const signature = req.get('x-authenticity-token');
   if (!pagbank.isAuthentic(req.rawBody, signature)) {
