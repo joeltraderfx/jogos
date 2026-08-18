@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Alugar sala — Planos</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --panel: #12131a; --panel-2: #191b24; --panel-3: #20222e;
+  --gold: #e8b84b; --gold-bright: #ffd876;
+  --success: #2fa98c; --danger: #d1352b; --info: #3f7fd1;
+  --cream: #f4ede1; --cream-dim: #9a958d;
+  --border: rgba(232,184,75,0.22);
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 20px 12px 60px;
+  background: radial-gradient(ellipse 90% 60% at 50% -10%, #1c2b3f 0%, #0a0b10 55%);
+  min-height: 100vh; font-family: 'Inter', sans-serif; color: var(--cream);
+  display: flex; justify-content: center;
+}
+.wrap { width: 100%; max-width: 640px; }
+h1 { font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.05em; text-align: center; margin: 0 0 4px; font-size: 34px; }
+.sub { text-align: center; color: var(--cream-dim); margin: 0 0 24px; font-size: 14px; }
+.card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 18px; margin-bottom: 16px; }
+label { font-size: 13px; color: var(--cream-dim); display: block; margin-bottom: 6px; }
+.text-input { width: 100%; background: #08090d; border: 1.5px solid var(--border); color: var(--cream); font-size: 16px; padding: 12px; border-radius: 8px; }
+.code-input { text-align: center; font-family: monospace; font-size: 24px; letter-spacing: 0.2em; }
+.plans { display: grid; gap: 12px; margin-top: 16px; }
+.plan {
+  background: var(--panel-2); border: 1.5px solid var(--border); border-radius: 10px;
+  padding: 16px; display: flex; justify-content: space-between; align-items: center;
+  cursor: pointer; transition: border-color .15s;
+}
+.plan:hover { border-color: var(--gold); }
+.plan.selected { border-color: var(--gold-bright); background: var(--panel-3); }
+.plan-name { font-family: 'Bebas Neue', sans-serif; font-size: 20px; letter-spacing: .03em; }
+.plan-detail { color: var(--cream-dim); font-size: 13px; margin-top: 2px; }
+.plan-price { text-align: right; }
+.plan-price .total { font-family: 'Bebas Neue', sans-serif; font-size: 22px; color: var(--gold-bright); }
+.plan-price .perday { font-size: 12px; color: var(--cream-dim); }
+.big-btn {
+  width: 100%; height: 52px; border: none; border-radius: 8px; margin-top: 18px;
+  font-family: 'Bebas Neue', sans-serif; font-size: 19px; letter-spacing: .04em; cursor: pointer; color: #1a1200;
+  background: linear-gradient(180deg, var(--gold) 0%, #a9781f 100%);
+}
+.big-btn:disabled { opacity: .5; cursor: not-allowed; }
+.msg { font-size: 13px; color: var(--danger); margin-top: 10px; min-height: 18px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>ALUGAR SALA <span style="color:var(--gold-bright)">MULTILINGUE</span></h1>
+  <p class="sub">Escolha o código da sala e o plano — o link fica disponível para os convidados assim que o pagamento for aprovado.</p>
+
+  <div class="card">
+    <label for="roomCodeInput">CÓDIGO DA SALA (4 DÍGITOS)</label>
+    <input class="text-input code-input" id="roomCodeInput" maxlength="4" placeholder="1900" inputmode="numeric">
+
+    <div class="plans" id="plans"></div>
+
+    <button class="big-btn" id="btnPay" disabled>Selecione um plano</button>
+    <div class="msg" id="msg"></div>
+  </div>
+</div>
+
+<script>
+  const params = new URLSearchParams(location.search);
+  const roomCodeInput = document.getElementById('roomCodeInput');
+  if (params.get('sala')) roomCodeInput.value = params.get('sala').slice(0,4);
+
+  const plansEl = document.getElementById('plans');
+  const btnPay = document.getElementById('btnPay');
+  const msgEl = document.getElementById('msg');
+  let selectedPlan = null;
+  let plansData = {};
+
+  function formatBRL(cents) {
+    return (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  }
+
+  async function loadPlans() {
+    try {
+      const res = await fetch('/api/planos');
+      plansData = await res.json();
+      plansEl.innerHTML = '';
+      Object.entries(plansData).forEach(([key, p]) => {
+        const el = document.createElement('div');
+        el.className = 'plan';
+        el.dataset.key = key;
+        el.innerHTML = `
+          <div>
+            <div class="plan-name">${p.label}</div>
+            <div class="plan-detail">${p.days} dia(s) de acesso à sala</div>
+          </div>
+          <div class="plan-price">
+            <div class="total">${formatBRL(p.price)}</div>
+            <div class="perday">${formatBRL(Math.round(p.price / p.days))}/dia</div>
+          </div>`;
+        el.addEventListener('click', () => selectPlan(key, el));
+        plansEl.appendChild(el);
+      });
+    } catch (e) {
+      msgEl.textContent = 'Não foi possível carregar os planos. Recarregue a página.';
+    }
+  }
+
+  function selectPlan(key, el) {
+    selectedPlan = key;
+    document.querySelectorAll('.plan').forEach(p => p.classList.remove('selected'));
+    el.classList.add('selected');
+    btnPay.disabled = false;
+    btnPay.textContent = 'Pagar ' + formatBRL(plansData[key].price);
+  }
+
+  btnPay.addEventListener('click', async () => {
+    msgEl.textContent = '';
+    const roomCode = roomCodeInput.value.trim();
+    if (!/^\d{4}$/.test(roomCode)) {
+      msgEl.textContent = 'Digite um código de sala com 4 dígitos.';
+      return;
+    }
+    if (!selectedPlan) return;
+
+    btnPay.disabled = true;
+    btnPay.textContent = 'Gerando pagamento...';
+    try {
+      const res = await fetch('/api/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roomCode, plan: selectedPlan }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Falha ao criar pagamento.');
+      location.href = data.paymentUrl;
+    } catch (e) {
+      msgEl.textContent = e.message || 'Erro ao iniciar o pagamento.';
+      btnPay.disabled = false;
+      btnPay.textContent = 'Tentar novamente';
+    }
+  });
+
+  loadPlans();
+</script>
+</body>
+</html>

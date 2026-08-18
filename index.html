@@ -430,6 +430,15 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       document.getElementById('btnCreate').style.display = 'none';
       document.getElementById('btnJoin').style.width = '100%';
       userNameInput.focus();
+      return;
+    }
+    // Retorno pós-pagamento: só preenche o código, sem esconder "Criar
+    // Sala" — quem pagou precisa continuar sendo o anfitrião (a pessoa cujo
+    // peer vira a âncora da sala), não um convidado comum.
+    const hostReturn = (params.get('codigo') || '').trim().slice(0,4).toUpperCase();
+    if(hostReturn){
+      roomCodeInput.value = hostReturn;
+      userNameInput.focus();
     }
   })();
 
@@ -448,15 +457,44 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
   document.getElementById('btnCreate').addEventListener('click', () => {
     const code = roomCodeInput.value.trim() || Math.floor(1000 + Math.random() * 9000).toString();
     isHost = true;
-    startRoom(code);
+    checkRoomPaidThenStart(code);
   });
 
   document.getElementById('btnJoin').addEventListener('click', () => {
     const code = roomCodeInput.value.trim();
     if(code.length !== 4) return showToast('Digite o código de 4 dígitos!');
     isHost = false;
-    startRoom(code);
+    checkRoomPaidThenStart(code);
   });
+
+  // A sala só pode ser criada/acessada dentro do período pago. Isso vale
+  // tanto para quem cria (o anfitrião) quanto para quem entra pelo link de
+  // convite — o aluguel é da sala, não da pessoa.
+  async function checkRoomPaidThenStart(code){
+    const btn = document.getElementById(isHost ? 'btnCreate' : 'btnJoin');
+    const originalText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Verificando...';
+    try{
+      const res = await fetch('/api/room-status/' + code);
+      const data = await res.json();
+      if(!data.active){
+        showToast(isHost
+          ? 'Essa sala ainda não tem um plano ativo. Escolha um plano para liberá-la.'
+          : 'Essa sala está vencida ou ainda não foi paga. Fale com quem te enviou o link.');
+        if(isHost){
+          setTimeout(() => { location.href = '/planos.html?sala=' + code; }, 1200);
+        }
+        return;
+      }
+      startRoom(code);
+    }catch(e){
+      showToast('Não foi possível confirmar o pagamento da sala agora. Tente novamente em instantes.');
+    }finally{
+      btn.disabled = false;
+      btn.textContent = originalText;
+    }
+  }
 
   function startRoom(code) {
     myName = userNameInput.value.trim() || 'Usuário';

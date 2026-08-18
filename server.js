@@ -1,11 +1,18 @@
 const express = require('express');
 const path = require('path');
 const { WebSocketServer } = require('ws');
+const pagbank = require('./pagbank');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(express.json({ limit: '256kb' }));
+// Guarda o corpo bruto de toda requisição JSON — necessário para o webhook
+// do PagBank, cuja assinatura é calculada sobre os bytes exatos recebidos
+// (reformatar o JSON quebraria a comparação SHA-256).
+app.use(express.json({
+  limit: '256kb',
+  verify: (req, res, buf) => { req.rawBody = buf.toString('utf-8'); }
+}));
 app.use(express.static(__dirname, {
   setHeaders: (res, filePath) => {
     if (filePath.endsWith('.html')) {
@@ -18,6 +25,39 @@ app.use(express.static(__dirname, {
     }
   }
 }));
+
+// ================= Aluguel de sala (pagamento PagBank) =================
+function publicBaseUrl(req) {
+  return process.env.PUBLIC_BASE_URL || `${req.protocol}://${req.get('host')}`;
+}
+
+app.get('/api/planos', (req, res) => {
+  res.json(pagbank.PLANS);
+});
+
+app.get('/api/room-status/:code', (req, res) => {
+  res.json(pagbank.roomStatus(req.params.code));
+});
+
+app.post('/api/checkout', async (req, res) => {
+  const { roomCode, plan } = req.body || {};
+  try {
+    const result = await pagbank.createCheckout({ roomCode, plan, publicBaseUrl: publicBaseUrl(req) });
+    res.json(result);
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+app.post('/api/pagbank/webhook', (req, res) => {
+  const signature = req.get('x-authenticity-token');
+  if (!pagbank.isAuthentic(req.rawBody, signature)) {
+    // Não é uma notificação genuína do PagBank — descarta sem processar.
+    return res.status(401).json({ error: 'assinatura inválida' });
+  }
+  const result = pagbank.handlePaymentNotification(req.body);
+  res.status(200).json(result);
+});
 
 // Simple in-memory room store. Good enough for a live demo — resets if the
 // server restarts or redeploys, which on Render's free tier can also happen
