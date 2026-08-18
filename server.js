@@ -6,30 +6,6 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json({ limit: '256kb' }));
-
-// Secure DeepL proxy. Keep DEEPL_AUTH_KEY only on the server.
-app.post('/api/deepl/translate', async (req, res) => {
-  const { text, sourceLang, targetLang } = req.body || {};
-  if (typeof text !== 'string' || !text.trim() || text.length > 3000) {
-    return res.status(400).json({ error: 'Texto inválido' });
-  }
-  const authKey = process.env.DEEPL_AUTH_KEY;
-  if (!authKey) return res.status(503).json({ error: 'DeepL não configurado no servidor' });
-  try {
-    const deeplBase = process.env.DEEPL_API_URL || (authKey.endsWith(':fx') ? 'https://api-free.deepl.com' : 'https://api.deepl.com');
-    const response = await fetch(deeplBase + '/v2/translate', {
-      method: 'POST',
-      headers: { 'Authorization': `DeepL-Auth-Key ${authKey}`, 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ text: text.trim(), source_lang: String(sourceLang || '').slice(0, 5).toUpperCase(), target_lang: String(targetLang || 'EN').slice(0, 5).toUpperCase() })
-    });
-    if (!response.ok) { const detail = await response.text(); return res.status(502).json({ error: 'Falha no DeepL: ' + detail.slice(0, 180) }); }
-    const data = await response.json();
-    res.json({ translatedText: data.translations?.[0]?.text || '' });
-  } catch (error) {
-    res.status(502).json({ error: 'Serviço de tradução indisponível' });
-  }
-});
-
 app.use(express.static(__dirname, {
   setHeaders: (res, filePath) => {
     if (filePath.endsWith('.html')) {
@@ -58,25 +34,6 @@ app.put('/kv/:key', (req, res) => {
   res.json({ ok: true });
 });
 
-app.get('/api/rooms/:code', (req, res) => {
-  const code = String(req.params.code || '');
-  res.json({ deleted: deletedRooms.has(code) });
-});
-
-app.delete('/api/rooms/:code', (req, res) => {
-  const code = String(req.params.code || '');
-  deletedRooms.add(code);
-  const peers = rooms.get(code);
-  if(peers){
-    for(const ws of peers.values()){
-      try{ ws.send(JSON.stringify({ type:'room-deleted' })); }catch(e){}
-      try{ ws.close(4001, 'room deleted'); }catch(e){}
-    }
-    rooms.delete(code);
-  }
-  res.json({ ok:true, deleted:true });
-});
-
 app.get('/health', (req, res) => res.send('ok'));
 
 const server = app.listen(PORT, () => {
@@ -89,13 +46,12 @@ const server = app.listen(PORT, () => {
 // devices (peer-to-peer), never through this server.
 const wss = new WebSocketServer({ server, path: '/signal' });
 const rooms = new Map(); // roomCode -> Map(playerId -> ws)
-const deletedRooms = new Set();
 
 wss.on('connection', (ws, req) => {
   const url = new URL(req.url, 'http://localhost');
   const room = url.searchParams.get('room');
   const id = url.searchParams.get('id');
-  if (!room || !id || deletedRooms.has(room)) { ws.close(4001, 'room deleted'); return; }
+  if (!room || !id) { ws.close(); return; }
 
   if (!rooms.has(room)) rooms.set(room, new Map());
   rooms.get(room).set(id, ws);
