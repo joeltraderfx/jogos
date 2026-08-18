@@ -85,6 +85,7 @@ label { font-size: 13px; color: var(--cream-dim); display: block; margin-bottom:
       const res = await fetch('/api/planos');
       plansData = await res.json();
       plansEl.innerHTML = '';
+      const preselect = params.get('plano');
       Object.entries(plansData).forEach(([key, p]) => {
         const el = document.createElement('div');
         el.className = 'plan';
@@ -100,6 +101,7 @@ label { font-size: 13px; color: var(--cream-dim); display: block; margin-bottom:
           </div>`;
         el.addEventListener('click', () => selectPlan(key, el));
         plansEl.appendChild(el);
+        if(preselect === key) selectPlan(key, el);
       });
     } catch (e) {
       msgEl.textContent = 'Não foi possível carregar os planos. Recarregue a página.';
