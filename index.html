@@ -183,9 +183,13 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       <label style="font-size: 13px; color: var(--cream-dim);">SEU NOME</label>
       <input class="text-input" id="userNameInput" placeholder="Ex: Joel / Sophia..." maxlength="20">
 
-      <div style="margin-top: 12px;">
+      <div style="margin-top: 12px;" id="roomCodeField">
         <label style="font-size: 13px; color: var(--cream-dim);">CÓDIGO DA SALA (4 DIGITOS)</label>
         <input class="text-input code-input" id="roomCodeInput" maxlength="4" placeholder="1900">
+      </div>
+      <div style="margin-top: 12px; display:none;" id="invitedRoomField">
+        <label style="font-size: 13px; color: var(--cream-dim);">SALA</label>
+        <div class="room-code-pill" style="width:100%; justify-content:center; padding:12px; font-size:20px;"><span id="invitedRoomCode">----</span></div>
       </div>
 
       <div class="btn-group">
@@ -412,12 +416,19 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
   // Sistema de sala independente para os clientes: quem cria a sala pode
   // copiar um link de convite e mandar direto para os participantes — eles
   // só abrem o link, o código já vem preenchido e entram normal, sem
-  // precisar saber nada do sistema por trás.
+  // precisar saber nada do sistema por trás. Quem chega por esse link é
+  // sempre cliente/convidado: não faz sentido oferecer "Criar Sala" pra ele,
+  // então essa opção fica escondida e só sobra o botão de entrar.
   (function prefillFromInviteLink(){
     const params = new URLSearchParams(location.search);
-    const invited = (params.get('sala') || '').trim();
+    const invited = (params.get('sala') || '').trim().slice(0,4).toUpperCase();
     if(invited){
-      roomCodeInput.value = invited.slice(0,4).toUpperCase();
+      roomCodeInput.value = invited;
+      document.getElementById('roomCodeField').style.display = 'none';
+      document.getElementById('invitedRoomField').style.display = '';
+      document.getElementById('invitedRoomCode').textContent = invited;
+      document.getElementById('btnCreate').style.display = 'none';
+      document.getElementById('btnJoin').style.width = '100%';
       userNameInput.focus();
     }
   })();
