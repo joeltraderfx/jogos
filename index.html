@@ -824,7 +824,21 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
   async function startMedia(){
     if(mediaStarted) return;
     try {
-      localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      // Pede o áudio já com processamento de voz ligado explicitamente
+      // (cancelamento de eco, redução de ruído, ganho automático). No
+      // desktop isso já costuma vir ligado por padrão, mas em muitos
+      // celulares Android o padrão do fabricante é mais fraco — pedir
+      // explícito ajuda bastante o reconhecimento de voz a captar a fala
+      // com menos ruído de fundo.
+      localStream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          channelCount: 1,
+        },
+      });
       mediaStarted = true;
       addVideoFeed(myPeerId, myName + ' (Você)', localStream, true);
       document.getElementById('btnStartMedia').style.display = 'none';
@@ -845,7 +859,12 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
         if(!activeCalls[id]) callPeer(id);
       });
 
-      startTranslation();
+      // Uma pequena pausa antes de ligar o reconhecimento de voz evita que
+      // ele dispute o microfone com a chamada de vídeo bem no instante em
+      // que ela está sendo negociada — em muitos celulares Android essa
+      // disputa no mesmo milissegundo faz a legenda simplesmente não captar
+      // nada (fica em silêncio, sem erro nenhum).
+      setTimeout(startTranslation, 600);
     } catch(e) {
       document.getElementById('btnStartMedia').style.display = '';
       showToast('Autorize a câmera e o microfone nas configurações do seu navegador e toque em "Tentar novamente".');
@@ -1603,6 +1622,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
   let speechBuffer = '';
   let silenceTimer = null;
   let maxBufferTimer = null;
+  let consecutiveNoSpeech = 0; // detecta microfone travado sem gerar erro nenhum
 
   async function flushSpeechBuffer(){
     clearTimeout(silenceTimer);
@@ -1640,6 +1660,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     if(!SpeechRecognition){ showToast('Utilize o navegador Google Chrome para legendas automáticas.'); return; }
 
     isTranslating = true;
+    consecutiveNoSpeech = 0;
     document.getElementById('btnStartTranslate').textContent = "Pausar Legendas";
     document.getElementById('btnStartTranslate').style.background = "var(--danger)";
     broadcastAll({ type: 'translate-state', active: true });
@@ -1663,6 +1684,8 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       }catch(e){ return; }
       if(!transcript || transcript.length < 2) return;
 
+      consecutiveNoSpeech = 0; // chegou transcrição de verdade, mic está captando bem
+
       // Junta os pedaços reconhecidos e traduz assim que a pessoa faz uma
       // pausa (SILENCE_FLUSH_MS) — isso já dá frases com sentido, mas sem
       // segurar a legenda igual um timer fixo segurava. Se a pessoa falar
@@ -1677,8 +1700,22 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     };
 
     recognition.onerror = (e) => {
-      // 'no-speech' e 'aborted' são normais em pausas no celular.
-      if(e.error === 'no-speech' || e.error === 'aborted') return;
+      if(e.error === 'aborted') return;
+      if(e.error === 'no-speech'){
+        // Isolado, é só uma pausa normal na fala. Mas se acontecer muitas
+        // vezes seguidas SEM nenhuma transcrição de verdade no meio, é sinal
+        // de que o microfone não está captando nada — em vez de falhar
+        // calado, avisa a pessoa uma única vez.
+        consecutiveNoSpeech++;
+        if(consecutiveNoSpeech === 6){
+          showToast('A legenda não está captando sua voz. Verifique se outro app não está usando o microfone e tente falar mais perto do celular.');
+        }
+        return;
+      }
+      if(e.error === 'audio-capture'){
+        showToast('Não consegui acessar o microfone para a legenda. Feche outros apps que possam estar usando o microfone (outra chamada, outro navegador) e toque em "Pausar Legendas" e depois em "Ativar Legendas" de novo.');
+        return;
+      }
       if(e.error === 'not-allowed' || e.error === 'service-not-allowed'){
         stopTranslation();
         showToast('Permita o microfone e o reconhecimento de voz para as legendas automáticas funcionarem.');
