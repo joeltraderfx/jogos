@@ -211,6 +211,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
         <button class="tool-btn accent-init" id="btnStartMedia" style="display:none;">📸 Tentar novamente (câmera/áudio)</button>
         <button class="tool-btn" id="btnToggleMic" style="display:none;">🎤 Mic</button>
         <button class="tool-btn" id="btnToggleCam" style="display:none;">📹 Câmera</button>
+        <button class="tool-btn" id="btnFlipCamera" style="display:none;">🔄 Trocar câmera</button>
         <button class="tool-btn" id="btnScreenShare" style="display:none;">🖥️ Compartilhar tela</button>
         <button class="tool-btn" id="btnEnableAudio" style="display:none;">🔊 Ativar áudio</button>
         <button class="tool-btn" id="btnWhiteboard">✏️ Lousa</button>
@@ -393,7 +394,16 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     config: {
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' }
+        { urls: 'stun:stun1.l.google.com:19302' },
+        // Servidor TURN gratuito (Open Relay Project). Sem TURN, dois
+        // celulares em redes diferentes (ex: um em wifi, outro em dados
+        // móveis) frequentemente não conseguem se conectar diretamente —
+        // a pessoa vê a própria câmera funcionando, mas ninguém do outro
+        // lado recebe o vídeo. O TURN serve de intermediário nesses casos.
+        { urls: 'stun:openrelay.metered.ca:80' },
+        { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+        { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+        { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
       ]
     }
   };
@@ -865,12 +875,49 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       // disputa no mesmo milissegundo faz a legenda simplesmente não captar
       // nada (fica em silêncio, sem erro nenhum).
       setTimeout(startTranslation, 600);
+
+      // Em celulares com mais de uma câmera, mostra o botão de trocar
+      // frontal/traseira — útil especialmente no iPhone, onde o Safari não
+      // permite compartilhar a tela de dentro do navegador; a câmera
+      // traseira funciona como alternativa para mostrar documentos, telas
+      // de outro aparelho, produtos, etc.
+      if(navigator.mediaDevices.enumerateDevices){
+        navigator.mediaDevices.enumerateDevices().then(devices => {
+          const cameraCount = devices.filter(d => d.kind === 'videoinput').length;
+          if(cameraCount > 1) document.getElementById('btnFlipCamera').style.display = '';
+        }).catch(()=>{});
+      }
     } catch(e) {
       document.getElementById('btnStartMedia').style.display = '';
       showToast('Autorize a câmera e o microfone nas configurações do seu navegador e toque em "Tentar novamente".');
     }
   }
   document.getElementById('btnStartMedia').addEventListener('click', startMedia);
+
+  /* ---- trocar câmera frontal/traseira (troca a faixa de vídeo em tempo real) ---- */
+  let usingFrontCamera = true;
+  let flippingCamera = false;
+  document.getElementById('btnFlipCamera').addEventListener('click', async () => {
+    if(!localStream || flippingCamera || isScreenSharing) return;
+    flippingCamera = true;
+    const oldTrack = localStream.getVideoTracks()[0];
+    const nextFacing = usingFrontCamera ? 'environment' : 'user';
+    try{
+      const newStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { exact: nextFacing } },
+        audio: false,
+      });
+      const newTrack = newStream.getVideoTracks()[0];
+      if(oldTrack){ localStream.removeTrack(oldTrack); oldTrack.stop(); }
+      localStream.addTrack(newTrack);
+      replaceOutgoingVideoTrack(newTrack);
+      usingFrontCamera = !usingFrontCamera;
+    }catch(e){
+      showToast('Não foi possível trocar de câmera neste aparelho.');
+    }finally{
+      flippingCamera = false;
+    }
+  });
 
   document.getElementById('btnToggleMic').addEventListener('click', () => {
     if(!localStream) return;
@@ -908,6 +955,10 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
         return;
       }
       if(wbOpenState) setWhiteboardOpen(false, true);
+      if(!navigator.mediaDevices.getDisplayMedia){
+        showToast('Esse navegador não permite compartilhar a tela (comum no iPhone/Safari). Use o botão "Trocar câmera" para mostrar algo com a câmera traseira.');
+        return;
+      }
       try{
         screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
       }catch(e){ return; }
@@ -1142,6 +1193,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     document.getElementById('btnStartMedia').style.display = '';
     document.getElementById('btnToggleMic').style.display = 'none';
     document.getElementById('btnToggleCam').style.display = 'none';
+    document.getElementById('btnFlipCamera').style.display = 'none';
     document.getElementById('btnScreenShare').style.display = 'none';
     document.getElementById('btnEnableAudio').style.display = 'none';
     for(const k in participants) delete participants[k];
