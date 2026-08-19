@@ -58,33 +58,41 @@ app.get('/api/pagbank-debug', async (req, res) => {
   const token = process.env.PAGBANK_TOKEN || '';
   const masked = token ? `${token.slice(0, 8)}...${token.slice(-6)} (comprimento: ${token.length})` : '(vazio — variável não configurada)';
 
-  let pagbankResult;
-  try {
-    const baseUrl = process.env.PAGBANK_ENV === 'production' ? 'https://api.pagseguro.com' : 'https://sandbox.api.pagseguro.com';
-    const testRes = await fetch(`${baseUrl}/checkouts`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        reference_id: 'diagnostico-' + Date.now(),
-        items: [{ name: 'Diagnóstico', quantity: 1, unit_amount: 1000 }],
-      }),
-    });
-    const bodyText = await testRes.text();
-    let parsedBody;
-    try { parsedBody = JSON.parse(bodyText); } catch (e) { parsedBody = bodyText; }
-    pagbankResult = { httpStatus: testRes.status, body: parsedBody };
-  } catch (e) {
-    pagbankResult = { error: 'Falha de rede ao chamar o PagBank: ' + e.message };
+  async function testEnv(baseUrl) {
+    try {
+      const testRes = await fetch(`${baseUrl}/checkouts`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          reference_id: 'diagnostico-' + Date.now(),
+          items: [{ name: 'Diagnóstico (não gera cobrança)', quantity: 1, unit_amount: 1000 }],
+        }),
+      });
+      const bodyText = await testRes.text();
+      let parsedBody;
+      try { parsedBody = JSON.parse(bodyText); } catch (e) { parsedBody = bodyText; }
+      return { httpStatus: testRes.status, body: parsedBody };
+    } catch (e) {
+      return { error: 'Falha de rede: ' + e.message };
+    }
   }
 
+  const [sandbox, producao] = await Promise.all([
+    testEnv('https://sandbox.api.pagseguro.com'),
+    testEnv('https://api.pagseguro.com'),
+  ]);
+
   res.json({
-    ambiente: process.env.PAGBANK_ENV || '(não configurado, usando sandbox por padrão)',
     tokenMascarado: masked,
     publicBaseUrl: publicBaseUrl(req),
-    respostaDoPagBank: pagbankResult,
+    // Cada teste só CRIA um checkout de valor simbólico (R$10,00) para
+    // verificar a credencial — ninguém paga nada com isso, checkouts não
+    // pagos simplesmente expiram sozinhos depois de um tempo.
+    testeContraSandbox: sandbox,
+    testeContraProducao: producao,
   });
 });
 
