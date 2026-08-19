@@ -173,6 +173,12 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
 
   <section class="screen active" id="screen-home">
     <div class="card">
+      <div id="inAppBrowserWarning" style="display:none; margin-bottom:14px; padding:12px 14px; border-radius:9px; background:rgba(209,53,43,0.14); border:1.5px solid var(--danger); font-size:13px; line-height:1.5;">
+        <b style="color:#ffb3ad;">⚠️ Você abriu esse link de dentro de outro app (WhatsApp, Instagram, etc).</b>
+        <div style="margin-top:6px; color:var(--cream);">A legenda automática (que traduz sua fala) só funciona no navegador de verdade. Toque nos <b>⋮ três pontinhos</b> no canto superior e escolha <b>"Abrir no Chrome"</b> ou <b>"Abrir no navegador"</b> antes de continuar.</div>
+        <a id="btnOpenInChrome" href="#" style="display:inline-block; margin-top:8px; font-size:13px; font-weight:700; color:#1a1200; background:var(--gold-bright); padding:7px 12px; border-radius:6px; text-decoration:none;">Tentar abrir no Chrome</a>
+      </div>
+
       <label style="font-size: 13px; color: var(--cream-dim);">SEU NOME</label>
       <input class="text-input" id="userNameInput" placeholder="Ex: Joel / Sophia..." maxlength="20">
 
@@ -401,6 +407,28 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
   }
 
   /* ================= Entry ================= */
+  // Legendas automáticas dependem do reconhecimento de voz do navegador, que
+  // fica travado dentro dos navegadores "encapsulados" que apps como
+  // WhatsApp e Instagram abrem quando alguém toca num link — mesmo que a
+  // página peça a permissão do jeito certo, esses apps não liberam de
+  // verdade. Detecta isso e avisa a pessoa a abrir no Chrome de verdade
+  // antes de entrar na sala.
+  (function detectInAppBrowser(){
+    const ua = navigator.userAgent || '';
+    const isInApp = /FBAN|FBAV|Instagram|WhatsApp|Line\/|MicroMessenger|; wv\)/i.test(ua);
+    if(!isInApp) return;
+
+    const banner = document.getElementById('inAppBrowserWarning');
+    banner.style.display = 'block';
+
+    // Truque conhecido para pedir ao Android para abrir a URL atual no
+    // Chrome de verdade. Nem todo app libera essa navegação (alguns
+    // bloqueiam por segurança), então as instruções manuais acima do botão
+    // continuam sendo o caminho garantido.
+    const target = location.href.replace(/^https?:\/\//, '');
+    document.getElementById('btnOpenInChrome').href = `intent://${target}#Intent;scheme=https;package=com.android.chrome;end`;
+  })();
+
   // Sistema de sala independente para os clientes: quem cria a sala pode
   // copiar um link de convite e mandar direto para os participantes — eles
   // só abrem o link, o código já vem preenchido e entram normal, sem
