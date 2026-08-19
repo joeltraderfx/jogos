@@ -193,7 +193,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       </div>
 
       <div class="btn-group">
-        <button class="big-btn primary" id="btnJoin">Entrar na Sala</button>
+        <button class="big-btn primary" id="btnJoin" style="display:none;">Entrar na Sala</button>
         <button class="big-btn accent" id="btnCreate">Criar Sala</button>
       </div>
     </div>
@@ -428,6 +428,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       document.getElementById('invitedRoomField').style.display = '';
       document.getElementById('invitedRoomCode').textContent = invited;
       document.getElementById('btnCreate').style.display = 'none';
+      document.getElementById('btnJoin').style.display = '';
       document.getElementById('btnJoin').style.width = '100%';
       userNameInput.focus();
       return;
@@ -470,7 +471,16 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
   // A sala só pode ser criada/acessada dentro do período pago. Isso vale
   // tanto para quem cria (o anfitrião) quanto para quem entra pelo link de
   // convite — o aluguel é da sala, não da pessoa.
+  //
+  // TEMPORÁRIO: desligado enquanto o token do PagBank não é liberado, para
+  // permitir que as pessoas testem o site livremente. Assim que o
+  // pagamento estiver funcionando, troque para "true" nesta linha e a
+  // trava volta a valer sem precisar mexer em mais nada.
+  const PAYMENT_REQUIRED = false;
+
   async function checkRoomPaidThenStart(code){
+    if(!PAYMENT_REQUIRED){ startRoom(code); return; }
+
     const btn = document.getElementById(isHost ? 'btnCreate' : 'btnJoin');
     const originalText = btn.textContent;
     btn.disabled = true;

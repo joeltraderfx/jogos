@@ -23,9 +23,7 @@ const obfuscated = JavaScriptObfuscator.obfuscate(code, {
   stringArray: true,
   stringArrayEncoding: ['base64'],
   stringArrayThreshold: 0.85,
-  splitStrings: true,
-  splitStringsChunkLength: 8,
-  transformObjectKeys: true
+  unicodeEscapeSequence: true
 }).getObfuscatedCode();
 
 const out = html.replace(scriptMatch[0], '<script>' + obfuscated + '</script>\n</body>');
