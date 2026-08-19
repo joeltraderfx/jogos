@@ -1549,7 +1549,11 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
      direto do navegador, sem servidor, e tem qualidade bem superior ao tradutor
      anterior — inclusive com termos técnicos digitados na tela/lousa). */
   const DEEPL_PROXY_URL = ''; // ex: 'https://seu-worker.seunome.workers.dev/translate'
-  const SPEECH_BUFFER_MS = 5000; // acumula a fala por 5s antes de traduzir → frases completas, tradução melhor
+  // Traduz assim que a pessoa faz uma pausa natural na fala (bem mais
+  // parecido com tempo real). Só força a tradução no meio da fala se a
+  // pessoa falar sem parar por muito tempo, pra legenda não ficar presa.
+  const SILENCE_FLUSH_MS = 1200;
+  const MAX_BUFFER_MS = 4000;
 
   // A DeepL exige variantes específicas para alguns idiomas-alvo (ex: "EN-US"
   // em vez de "EN", "PT-BR" em vez de "PT") — o Google Translate aceita o
@@ -1579,12 +1583,16 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     return translated;
   }
 
-  /* ================= Reconhecimento de fala (com buffer de 5s) + legendas automáticas ================= */
+  /* ================= Reconhecimento de fala (flush por pausa) + legendas automáticas ================= */
   let speechBuffer = '';
-  let speechBufferTimer = null;
+  let silenceTimer = null;
+  let maxBufferTimer = null;
 
   async function flushSpeechBuffer(){
-    speechBufferTimer = null;
+    clearTimeout(silenceTimer);
+    clearTimeout(maxBufferTimer);
+    silenceTimer = null;
+    maxBufferTimer = null;
     const transcript = speechBuffer.trim();
     speechBuffer = '';
     if(!transcript) return;
@@ -1639,13 +1647,16 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       }catch(e){ return; }
       if(!transcript || transcript.length < 2) return;
 
-      // Em vez de traduzir frase a frase, acumula por SPEECH_BUFFER_MS (5s):
-      // dá tempo do sistema "entender" o que foi falado e traduz frases
-      // inteiras, o que melhora muito a qualidade — principalmente quando
-      // a pessoa está explicando algo na tela compartilhada ou na lousa.
+      // Junta os pedaços reconhecidos e traduz assim que a pessoa faz uma
+      // pausa (SILENCE_FLUSH_MS) — isso já dá frases com sentido, mas sem
+      // segurar a legenda igual um timer fixo segurava. Se a pessoa falar
+      // sem parar, MAX_BUFFER_MS garante que a legenda não fica presa
+      // esperando uma pausa que não vem.
       speechBuffer = speechBuffer ? (speechBuffer + ' ' + transcript) : transcript;
-      if(!speechBufferTimer){
-        speechBufferTimer = setTimeout(flushSpeechBuffer, SPEECH_BUFFER_MS);
+      clearTimeout(silenceTimer);
+      silenceTimer = setTimeout(flushSpeechBuffer, SILENCE_FLUSH_MS);
+      if(!maxBufferTimer){
+        maxBufferTimer = setTimeout(flushSpeechBuffer, MAX_BUFFER_MS);
       }
     };
 
@@ -1692,8 +1703,10 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
   function stopTranslation(){
     if(recognition){ try{ recognition.stop(); }catch(e){} }
     isTranslating = false;
-    clearTimeout(speechBufferTimer);
-    speechBufferTimer = null;
+    clearTimeout(silenceTimer);
+    clearTimeout(maxBufferTimer);
+    silenceTimer = null;
+    maxBufferTimer = null;
     speechBuffer = '';
     document.getElementById('btnStartTranslate').textContent = "Ativar Legendas";
     document.getElementById('btnStartTranslate').style.background = "var(--success)";
