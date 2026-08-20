@@ -222,8 +222,16 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
         <button class="tool-btn" id="btnEnableAudio" style="display:none;">🔊 Ativar áudio</button>
         <button class="tool-btn" id="btnWhiteboard" style="display:none;">✏️ Lousa</button>
         <button class="tool-btn" id="btnRecord" style="display:none;">⏺️ Gravar</button>
-        <button class="tool-btn" id="btnToggleWbPermission" style="display:none;">🔒 Lousa p/ todos</button>
-        <button class="tool-btn" id="btnToggleScreenPermission" style="display:none;">🔒 Tela p/ todos</button>
+        </div>
+
+      <div class="toolbar" id="hostControlsBar" style="display:none; border-top: 1px dashed var(--border); margin-top: 10px; padding-top: 10px;">
+        <span style="font-size:11px; color:var(--cream-dim); text-transform:uppercase; letter-spacing:.05em; align-self:center; margin-right:2px;">Controle do anfitrião:</span>
+        <button class="tool-btn" id="btnToggleWbPermission">🔒 Lousa p/ todos</button>
+        <button class="tool-btn" id="btnToggleScreenPermission">🔒 Tela p/ todos</button>
+        <button class="tool-btn" id="btnMuteAll">🔇 Silenciar todos</button>
+        <button class="tool-btn" id="btnWebinarMode">📺 Modo webinar</button>
+        <button class="tool-btn" id="btnTranslationLock">🌐 Bloquear tradução</button>
+        <button class="tool-btn" id="btnPrivateChatMode">💬 Mensagens privadas</button>
         </div>
     </div>
 
@@ -313,6 +321,10 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
 <div class="chat-panel" id="chatPanel">
   <div class="chat-header"><span>Chat da sala</span><button id="chatCloseBtn">✕</button></div>
   <div class="chat-messages" id="chatMessages"></div>
+  <div id="chatReplyToField" style="display:none; padding:6px 14px; font-size:12px; color:var(--cream-dim); align-items:center; gap:6px; border-top:1px solid var(--border);">
+    <span>Responder para:</span>
+    <select id="chatReplyToSelect" style="flex:1; background:#08090d; color:var(--cream); border:1px solid var(--border); border-radius:6px; padding:4px 6px;"></select>
+  </div>
   <div class="chat-input-row">
     <input id="chatInput" maxlength="300" placeholder="Escreva uma mensagem...">
     <button id="chatSendBtn">Enviar</button>
@@ -379,6 +391,11 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
   // só o anfitrião pode liberar, um por um, durante a reunião.
   let allowGuestWhiteboard = false;
   let allowGuestScreenShare = false;
+  // Novos controles gerais do anfitrião.
+  let webinarMode = false;        // alunos só veem/ouvem o anfitrião, não uns aos outros
+  let translationLocked = false;  // anfitrião bloqueou a legenda pra sala inteira
+  let privateChatMode = false;    // chat vira 1-a-1 com o anfitrião, em vez de aberto pra todos
+  let forceMutedByHost = false;   // anfitrião silenciou meu microfone à força
   let micEnabled = true;
   let camEnabled = true;
   let isScreenSharing = false;
@@ -468,6 +485,96 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     document.getElementById('btnToggleScreenPermission').classList.toggle('active', allowGuestScreenShare);
     broadcastPermissions();
   });
+
+  /* ---- 1) Silenciar todos (microfone de todo mundo, à força) ---- */
+  document.getElementById('btnMuteAll').addEventListener('click', () => {
+    if(!isHost) return;
+    forceMutedByHost = !forceMutedByHost;
+    document.getElementById('btnMuteAll').textContent = forceMutedByHost ? '🔊 Reativar sons' : '🔇 Silenciar todos';
+    document.getElementById('btnMuteAll').classList.toggle('active', forceMutedByHost);
+    // O anfitrião também se silencia junto, pra ficar consistente com o que
+    // ele está pedindo pra sala.
+    applyForceMute();
+    broadcastAll({ type: 'force-mute', active: forceMutedByHost });
+    showToast(forceMutedByHost ? 'Todos os microfones foram silenciados.' : 'Os participantes podem reativar o microfone de novo.');
+  });
+
+  function applyForceMute(){
+    if(!localStream) return;
+    if(forceMutedByHost){
+      forceMuteMic();
+    }
+    // Ao liberar de novo, cada pessoa continua com o mic desligado até ela
+    // mesma decidir reativar — evita ligar o áudio sem a pessoa perceber.
+  }
+
+  /* ---- 2) Modo webinar (alunos só veem/ouvem o anfitrião) ---- */
+  document.getElementById('btnWebinarMode').addEventListener('click', () => {
+    if(!isHost) return;
+    webinarMode = !webinarMode;
+    document.getElementById('btnWebinarMode').textContent = webinarMode ? '📺 Sair do modo webinar' : '📺 Modo webinar';
+    document.getElementById('btnWebinarMode').classList.toggle('active', webinarMode);
+    applyWebinarModeUI();
+    broadcastAll({ type: 'webinar-mode', active: webinarMode });
+    showToast(webinarMode ? 'Modo webinar ativado: participantes só veem/ouvem você.' : 'Modo webinar desativado: participantes voltam a se ver.');
+  });
+
+  function applyWebinarModeUI(){
+    // O anfitrião sempre vê e ouve todo mundo, pra manter controle total da
+    // sala — a restrição vale só para quem NÃO é anfitrião.
+    if(isHost) return;
+    Object.keys(participants).forEach(id => {
+      if(id === myPeerId) return;
+      const isThatPersonHost = participants[id] && participants[id].isHost;
+      const card = document.getElementById('vcard-' + id);
+      if(card) card.style.display = (webinarMode && !isThatPersonHost) ? 'none' : '';
+      const audioEl = remoteAudioElements[id];
+      if(audioEl) audioEl.muted = webinarMode && !isThatPersonHost;
+    });
+  }
+
+  /* ---- 4) Bloquear tradução pra sala inteira ---- */
+  document.getElementById('btnTranslationLock').addEventListener('click', () => {
+    if(!isHost) return;
+    translationLocked = !translationLocked;
+    document.getElementById('btnTranslationLock').textContent = translationLocked ? '🌐 Liberar tradução' : '🌐 Bloquear tradução';
+    document.getElementById('btnTranslationLock').classList.toggle('active', translationLocked);
+    if(translationLocked && isTranslating) stopTranslation();
+    document.getElementById('btnStartTranslate').disabled = translationLocked;
+    broadcastAll({ type: 'translation-lock', active: translationLocked });
+    showToast(translationLocked ? 'Legendas bloqueadas para toda a sala.' : 'Legendas liberadas — cada um pode ativar de novo.');
+  });
+
+  /* ---- 5) Mensagens privadas (chat vira 1-a-1 com o anfitrião) ---- */
+  document.getElementById('btnPrivateChatMode').addEventListener('click', () => {
+    if(!isHost) return;
+    privateChatMode = !privateChatMode;
+    document.getElementById('btnPrivateChatMode').textContent = privateChatMode ? '💬 Chat aberto' : '💬 Mensagens privadas';
+    document.getElementById('btnPrivateChatMode').classList.toggle('active', privateChatMode);
+    applyPrivateChatUI();
+    broadcastAll({ type: 'private-chat-mode', active: privateChatMode });
+    showToast(privateChatMode ? 'Chat virou privado: cada aluno só fala com você.' : 'Chat voltou a ser aberto para todos.');
+  });
+
+  function applyPrivateChatUI(){
+    const replyField = document.getElementById('chatReplyToField');
+    replyField.style.display = (isHost && privateChatMode) ? 'flex' : 'none';
+    if(isHost && privateChatMode) refreshChatReplyOptions();
+  }
+
+  function refreshChatReplyOptions(){
+    const select = document.getElementById('chatReplyToSelect');
+    const current = select.value;
+    select.innerHTML = '';
+    Object.keys(participants).forEach(id => {
+      if(id === myPeerId || (participants[id] && participants[id].isHost)) return;
+      const opt = document.createElement('option');
+      opt.value = id;
+      opt.textContent = (participants[id] && participants[id].name) || 'Participante';
+      select.appendChild(opt);
+    });
+    if(current && select.querySelector(`option[value="${current}"]`)) select.value = current;
+  }
 
   /* ================= Entry ================= */
   // Legendas automáticas dependem do reconhecimento de voz do navegador, que
@@ -738,12 +845,31 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     return (participants[id] && participants[id].name) || 'Alguém';
   }
 
+  // Antes de considerar que alguém realmente saiu da sala, espera um tempo
+  // de tolerância — senão uma simples oscilação de rede (que a verificação
+  // periódica reconecta sozinha) dispararia a saída da pessoa pra sala
+  // inteira por engano.
+  const pendingLeaveTimers = {};
+  function scheduleLeaveCheck(peerId){
+    if(pendingLeaveTimers[peerId]) return;
+    pendingLeaveTimers[peerId] = setTimeout(() => {
+      delete pendingLeaveTimers[peerId];
+      if(!activeConns[peerId] && !activeCalls[peerId]){
+        handlePeerLeft(peerId);
+      }
+    }, 25000);
+  }
+  function cancelLeaveCheck(peerId){
+    if(pendingLeaveTimers[peerId]){ clearTimeout(pendingLeaveTimers[peerId]); delete pendingLeaveTimers[peerId]; }
+  }
+
   function setupConnection(conn){
     activeConns[conn.peer] = conn;
     conn.on('open', () => {
+      cancelLeaveCheck(conn.peer);
       conn.send({ type: 'identity', name: myName, peerId: myPeerId, isHost: isHost });
       if(isHost){
-        conn.send({ type: 'roster', participants: getRosterList(), wbShapes: wbShapes, allowWhiteboard: allowGuestWhiteboard, allowScreenShare: allowGuestScreenShare });
+        conn.send({ type: 'roster', participants: getRosterList(), wbShapes: wbShapes, allowWhiteboard: allowGuestWhiteboard, allowScreenShare: allowGuestScreenShare, webinarMode, translationLocked, privateChatMode, forceMutedByHost });
       }
       // Only the side that opened this data connection also places the media
       // call — the other side just answers. If both sides called each other
@@ -753,9 +879,48 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       }
     });
     conn.on('data', (data) => handleData(conn.peer, data));
-    conn.on('close', () => { handlePeerLeft(conn.peer); });
-    conn.on('error', () => {});
+    conn.on('close', () => {
+      delete activeConns[conn.peer];
+      // Não remove a pessoa da sala na hora — só agenda a checagem. Se a
+      // verificação periódica reconectar antes do prazo, nada acontece.
+      scheduleLeaveCheck(conn.peer);
+    });
+    conn.on('error', (e) => console.error('Falha na conexão de dados com', conn.peer, e));
+
+    // Mesma lógica do vídeo: a legenda, o chat e a lista de participantes
+    // passam por essa conexão separada da chamada de vídeo — uma pode
+    // funcionar enquanto a outra falha entre as duas mesmas pessoas. Se
+    // travar, fecha e deixa a verificação periódica (abaixo) reconectar.
+    (function watchDataIceState(){
+      const pc = conn.peerConnection;
+      if(!pc){ setTimeout(watchDataIceState, 300); return; }
+      pc.oniceconnectionstatechange = () => {
+        const state = pc.iceConnectionState;
+        if(state === 'failed' || state === 'disconnected'){
+          console.warn('Conexão de dados com', conn.peer, 'ficou', state, '.');
+          if(activeConns[conn.peer] === conn){
+            try{ conn.close(); }catch(e){}
+            delete activeConns[conn.peer];
+            scheduleLeaveCheck(conn.peer);
+          }
+        }
+      };
+    })();
   }
+
+  // Verificação periódica que repara sozinha conexões que deveriam existir
+  // mas falharam ou nunca chegaram a se estabelecer — a causa mais comum do
+  // "fulano não vê/ouve beltrano" em salas com 3+ pessoas: quanto mais
+  // gente, mais pares de conexão direta existem, e mais chance de algum
+  // par específico falhar sem que os outros percebam.
+  setInterval(() => {
+    if(!peer || peer.destroyed) return;
+    Object.keys(participants).forEach(id => {
+      if(id === myPeerId) return;
+      if(!activeConns[id]) connectToPeer(id, true); // force=true: tenta mesmo se normalmente a outra ponta iniciaria
+      if(mediaStarted && activeConns[id] && !activeCalls[id]) callPeer(id);
+    });
+  }, 8000);
 
   function getRosterList(){
     return Object.keys(participants).map(id => ({
@@ -770,6 +935,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
         participants[fromId] = { name: data.name, isHost: !!data.isHost, muted: false };
         if(document.getElementById('vcard-' + fromId)) updateVideoTag(fromId, data.name);
         else addVideoFeed(fromId, data.name, null);
+        applyWebinarModeUI();
         renderParticipantsList();
         if(isHost){
           broadcastExcept(fromId, { type: 'peer-joined', peerId: fromId, name: data.name });
@@ -791,6 +957,13 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
           allowGuestWhiteboard = !!data.allowWhiteboard;
           allowGuestScreenShare = !!data.allowScreenShare;
           applyGuestPermissionsUI();
+          webinarMode = !!data.webinarMode;
+          applyWebinarModeUI();
+          translationLocked = !!data.translationLocked;
+          document.getElementById('btnStartTranslate').disabled = translationLocked;
+          privateChatMode = !!data.privateChatMode;
+          forceMutedByHost = !!data.forceMutedByHost;
+          if(forceMutedByHost) applyForceMute();
         }
         renderParticipantsList();
         break;
@@ -810,6 +983,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
         if(!participants[data.peerId]) participants[data.peerId] = { name: data.name, muted: false };
         if(!document.getElementById('vcard-' + data.peerId)) addVideoFeed(data.peerId, data.name, null);
         connectToPeer(data.peerId);
+        applyWebinarModeUI();
         renderParticipantsList();
         break;
 
@@ -819,6 +993,11 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
 
       case 'chat':
         addChatBubble(data.name, data.text, false, data.translated);
+        if(isHost && privateChatMode){
+          refreshChatReplyOptions();
+          const select = document.getElementById('chatReplyToSelect');
+          if(select.querySelector(`option[value="${fromId}"]`)) select.value = fromId;
+        }
         break;
 
       case 'subtitle':
@@ -828,6 +1007,38 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       case 'mute-request':
         forceMuteMic();
         showToast('Você foi silenciado pelo anfitrião.');
+        break;
+
+      case 'force-mute':
+        if(!isHost){
+          forceMutedByHost = !!data.active;
+          if(forceMutedByHost) applyForceMute();
+          showToast(forceMutedByHost ? 'O anfitrião silenciou todos os microfones.' : 'O anfitrião liberou os microfones — você pode reativar o seu.');
+        }
+        break;
+
+      case 'webinar-mode':
+        if(!isHost){
+          webinarMode = !!data.active;
+          applyWebinarModeUI();
+          showToast(webinarMode ? 'Modo webinar: você só vê/ouve o anfitrião agora.' : 'Modo webinar desativado — você voltou a ver os outros participantes.');
+        }
+        break;
+
+      case 'translation-lock':
+        if(!isHost){
+          translationLocked = !!data.active;
+          if(translationLocked && isTranslating) stopTranslation();
+          document.getElementById('btnStartTranslate').disabled = translationLocked;
+          showToast(translationLocked ? 'O anfitrião bloqueou as legendas nesta sala.' : 'As legendas foram liberadas de novo.');
+        }
+        break;
+
+      case 'private-chat-mode':
+        if(!isHost){
+          privateChatMode = !!data.active;
+          showToast(privateChatMode ? 'O chat agora é privado — só você e o anfitrião veem suas mensagens.' : 'O chat voltou a ser aberto para todos.');
+        }
         break;
 
       case 'mic-state':
@@ -967,8 +1178,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
 
       if(isHost){
         document.getElementById('btnRecord').style.display = '';
-        document.getElementById('btnToggleWbPermission').style.display = '';
-        document.getElementById('btnToggleScreenPermission').style.display = '';
+        document.getElementById('hostControlsBar').style.display = '';
       }
 
       // Recover connections that were answered before we had media (they'd
@@ -1130,6 +1340,10 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
 
   document.getElementById('btnToggleMic').addEventListener('click', () => {
     if(!localStream) return;
+    if(forceMutedByHost && !isHost){
+      showToast('O anfitrião silenciou todos os microfones. Aguarde ele liberar de novo.');
+      return;
+    }
     micEnabled = !micEnabled;
     localStream.getAudioTracks().forEach(t => t.enabled = micEnabled);
     document.getElementById('btnToggleMic').textContent = micEnabled ? '🎤 Mic' : '🔇 Mic';
@@ -1427,12 +1641,24 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     document.getElementById('btnEnableAudio').style.display = 'none';
     document.getElementById('btnWhiteboard').style.display = 'none';
     document.getElementById('btnRecord').style.display = 'none';
-    document.getElementById('btnToggleWbPermission').style.display = 'none';
-    document.getElementById('btnToggleScreenPermission').style.display = 'none';
+    document.getElementById('hostControlsBar').style.display = 'none';
     document.getElementById('btnToggleWbPermission').textContent = '🔒 Lousa p/ todos';
     document.getElementById('btnToggleWbPermission').classList.remove('active');
     document.getElementById('btnToggleScreenPermission').textContent = '🔒 Tela p/ todos';
     document.getElementById('btnToggleScreenPermission').classList.remove('active');
+    document.getElementById('btnMuteAll').textContent = '🔇 Silenciar todos';
+    document.getElementById('btnMuteAll').classList.remove('active');
+    document.getElementById('btnWebinarMode').textContent = '📺 Modo webinar';
+    document.getElementById('btnWebinarMode').classList.remove('active');
+    document.getElementById('btnTranslationLock').textContent = '🌐 Bloquear tradução';
+    document.getElementById('btnTranslationLock').classList.remove('active');
+    document.getElementById('btnPrivateChatMode').textContent = '💬 Mensagens privadas';
+    document.getElementById('btnPrivateChatMode').classList.remove('active');
+    document.getElementById('chatReplyToField').style.display = 'none';
+    webinarMode = false;
+    translationLocked = false;
+    privateChatMode = false;
+    forceMutedByHost = false;
     allowGuestWhiteboard = false;
     allowGuestScreenShare = false;
     if(isRecording) stopRecording();
@@ -1549,7 +1775,20 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       if(translated.trim() && translated.trim() !== text.trim()) bubble.appendChild(box);
     }catch(e){ /* mensagem original já foi mostrada e enviada mesmo sem tradução */ }
 
-    broadcastAll({ type: 'chat', name: myName, text, translated });
+    const payload = { type: 'chat', name: myName, text, translated };
+
+    if(privateChatMode && !isHost){
+      // O aluno só fala com o anfitrião quando o modo privado está ligado.
+      sendTo(hostPeerId, payload);
+    } else if(privateChatMode && isHost){
+      // O anfitrião escolhe, no seletor acima do campo de texto, para qual
+      // aluno a resposta vai — não é um broadcast para todos.
+      const target = document.getElementById('chatReplyToSelect').value;
+      if(target) sendTo(target, payload);
+      else showToast('Escolha para quem responder no campo acima.');
+    } else {
+      broadcastAll(payload);
+    }
   }
   document.getElementById('chatSendBtn').addEventListener('click', sendChatMessage);
   chatInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter') sendChatMessage(); });
