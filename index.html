@@ -63,6 +63,12 @@ h1 { font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.05em; text-align: 
 .video-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin-top:10px; }
 .video-card { position: relative; background: #000; border-radius: 10px; border: 1.5px solid var(--border); aspect-ratio: 4/3; overflow: hidden; }
 .video-card video { width: 100%; height: 100%; object-fit: cover; }
+.video-card .connect-status {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  text-align: center; padding: 10px; font-size: 13px; color: var(--cream-dim);
+  background: rgba(8,9,13,0.55); z-index: 1;
+}
+.video-card .connect-status.retry-fail { color: #ffb3ad; }
 .video-card .tag { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.85); padding: 6px 10px; border-radius: 6px; font-size: 13px; color: var(--gold-bright); font-weight: bold; z-index: 2; border: 1px solid var(--border); display:flex; align-items:center; gap:6px; }
 .video-card .tag .mic-off{ color: var(--danger); }
 .video-card .tag .translate-on{ color: var(--info); display:none; }
@@ -661,7 +667,38 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       if(otherId === presentingPeerId) applyStageStreamIfAvailable();
     });
     call.on('close', () => { delete activeCalls[otherId]; delete peerStreams[otherId]; removeVideoFeed(otherId); });
-    call.on('error', () => {});
+    call.on('error', (e) => {
+      console.error('Falha na chamada com', otherId, e);
+      setConnectStatus(otherId, 'Falha na conexão de vídeo');
+    });
+
+    // O vídeo/áudio às vezes trava numa rede difícil mesmo com o TURN
+    // configurado — quando isso acontece, a pessoa aparece na sala mas
+    // ninguém vê ou ouve ela (o bug relatado). Em vez de deixar assim pra
+    // sempre, monitora o estado da conexão e tenta reconectar sozinho.
+    function watchIceState(){
+      const pc = call.peerConnection;
+      if(!pc){ setTimeout(watchIceState, 300); return; }
+      let retried = false;
+      pc.oniceconnectionstatechange = () => {
+        const state = pc.iceConnectionState;
+        if((state === 'failed' || state === 'disconnected') && !retried){
+          retried = true;
+          console.warn('Conexão de vídeo com', otherId, 'ficou', state, '— tentando reconectar.');
+          setConnectStatus(otherId, 'Conexão instável — reconectando…');
+          setTimeout(() => {
+            if(activeCalls[otherId] === call){
+              try{ call.close(); }catch(e){}
+              delete activeCalls[otherId];
+              // Só quem "manda" nessa dupla reconecta, senão os dois tentam
+              // ao mesmo tempo e cria duas chamadas concorrentes de novo.
+              if(myPeerId < otherId) callPeer(otherId);
+            }
+          }, 1500);
+        }
+      };
+    }
+    watchIceState();
   }
 
   /* ---- unified "stage": grid vs whiteboard vs screen-share, shared for everyone ---- */
@@ -726,7 +763,8 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     switch(data.type){
       case 'identity':
         participants[fromId] = { name: data.name, isHost: !!data.isHost, muted: false };
-        updateVideoTag(fromId, data.name);
+        if(document.getElementById('vcard-' + fromId)) updateVideoTag(fromId, data.name);
+        else addVideoFeed(fromId, data.name, null);
         renderParticipantsList();
         if(isHost){
           broadcastExcept(fromId, { type: 'peer-joined', peerId: fromId, name: data.name });
@@ -737,6 +775,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
         (data.participants || []).forEach(p => {
           if(p.peerId === myPeerId) return;
           if(!participants[p.peerId]) participants[p.peerId] = { name: p.name, isHost: p.isHost, muted: false };
+          if(!document.getElementById('vcard-' + p.peerId)) addVideoFeed(p.peerId, p.name, null);
           connectToPeer(p.peerId);
         });
         if(Array.isArray(data.wbShapes) && wbShapes.length === 0){
@@ -764,6 +803,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
 
       case 'peer-joined':
         if(!participants[data.peerId]) participants[data.peerId] = { name: data.name, muted: false };
+        if(!document.getElementById('vcard-' + data.peerId)) addVideoFeed(data.peerId, data.name, null);
         connectToPeer(data.peerId);
         renderParticipantsList();
         break;
@@ -1178,13 +1218,22 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     const video = document.createElement('video');
     video.autoplay = true; video.playsInline = true; video.controls = false; video.muted = isMobileDevice ? true : !!isMuted;
     video.setAttribute('webkit-playsinline', 'true');
-    video.srcObject = stream;
+    if(stream) video.srcObject = stream;
     if(!isMuted && !isMobileDevice){
       video.addEventListener('loadedmetadata', () => {
         video.muted = false;
         video.play().catch(() => {});
       }, { once:true });
     }
+
+    // Mostra "Conectando..." em vez de deixar uma caixa preta sem explicação
+    // enquanto a chamada de vídeo com essa pessoa ainda não fechou. Assim dá
+    // pra saber se está travado esperando conexão ou se já era pra ter vídeo.
+    const status = document.createElement('div');
+    status.className = 'connect-status';
+    status.id = 'status-' + id;
+    status.textContent = 'Conectando…';
+    status.style.display = (stream && stream.getTracks().length) ? 'none' : '';
 
     const tag = document.createElement('div');
     tag.className = 'tag'; tag.id = 'tag-' + id;
@@ -1195,7 +1244,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     caption.id = 'caption-' + id;
     caption.innerHTML = '<div class="caption-name"></div><div class="caption-original"></div><div class="caption-translated"></div>';
 
-    card.appendChild(video); card.appendChild(tag); card.appendChild(caption);
+    card.appendChild(video); card.appendChild(status); card.appendChild(tag); card.appendChild(caption);
 
     if(isHost && id !== myPeerId){
       const hostTools = document.createElement('div');
@@ -1231,6 +1280,13 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
         });
       }
     }
+    const status = document.getElementById('status-' + id);
+    if(status) status.style.display = (stream && stream.getTracks().length) ? 'none' : '';
+  }
+
+  function setConnectStatus(id, text){
+    const status = document.getElementById('status-' + id);
+    if(status){ status.textContent = text; status.style.display = ''; }
   }
 
   function attachRemoteAudio(peerId, stream){
