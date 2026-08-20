@@ -242,6 +242,10 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
         <option value="pt-BR">Português (Brasil)</option>
         <option value="en-US">Inglês (EUA)</option>
         <option value="es-ES">Espanhol</option>
+        <option value="fr-FR">Francês</option>
+        <option value="it-IT">Italiano</option>
+        <option value="zh-CN">Chinês (Mandarim)</option>
+        <option value="de-DE">Alemão</option>
       </select>
 
       <label>Traduzir para:</label>
@@ -249,6 +253,10 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
         <option value="en">Inglês</option>
         <option value="pt">Português</option>
         <option value="es">Espanhol</option>
+        <option value="fr">Francês</option>
+        <option value="it">Italiano</option>
+        <option value="zh">Chinês</option>
+        <option value="de">Alemão</option>
       </select>
 
       <button id="btnStartTranslate" style="background:var(--success); color:#fff; border:none; padding:10px 16px; border-radius:6px; cursor:pointer; font-weight:bold;">Ativar Legendas</button>
@@ -2157,7 +2165,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
   // A DeepL exige variantes específicas para alguns idiomas-alvo (ex: "EN-US"
   // em vez de "EN", "PT-BR" em vez de "PT") — o Google Translate aceita o
   // código simples normalmente, então esse mapeamento só é usado na DeepL.
-  const DEEPL_TARGET_MAP = { en: 'EN-US', pt: 'PT-BR', es: 'ES' };
+  const DEEPL_TARGET_MAP = { en: 'EN-US', pt: 'PT-BR', es: 'ES', fr: 'FR', it: 'IT', zh: 'ZH', de: 'DE' };
 
   async function translateText(text, sourceLang, targetLang){
     if(DEEPL_PROXY_URL){
