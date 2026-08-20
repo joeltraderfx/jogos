@@ -1742,6 +1742,29 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
   // O chat é o plano B do sistema: se a comunicação por vídeo falhar, a
   // mensagem escrita continua chegando, já traduzida, para quem estiver
   // do outro lado. Por isso toda mensagem enviada é traduzida antes de sair.
+  // E por ser um canal tão importante, uma mensagem nova não pode passar
+  // despercebida: a janela abre sozinha, toca um som e mostra um aviso.
+  function playChatNotificationSound(){
+    try{
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      const ctx = new AudioCtx();
+      const now = ctx.currentTime;
+      [880, 1175].forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0, now + i * 0.11);
+        gain.gain.linearRampToValueAtTime(0.18, now + i * 0.11 + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.11 + 0.16);
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.start(now + i * 0.11);
+        osc.stop(now + i * 0.11 + 0.18);
+      });
+      setTimeout(() => ctx.close(), 500);
+    }catch(e){ /* navegador sem suporte a áudio — sem problema, o aviso visual continua */ }
+  }
+
   function addChatBubble(name, text, mine, translated){
     const b = document.createElement('div');
     b.className = 'chat-bubble ' + (mine ? 'mine' : 'theirs');
@@ -1752,8 +1775,14 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     b.innerHTML = html;
     chatMessagesEl.appendChild(b);
     chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
-    if(!mine && !chatPanel.classList.contains('show')){
-      chatBadge.classList.add('show');
+    if(!mine){
+      // Abre a janela sozinha em vez de só deixar uma bolinha discreta —
+      // uma mensagem pode ser urgente (ex: "não consigo te ouvir").
+      chatPanel.classList.add('show');
+      chatBadge.classList.remove('show');
+      const preview = text.length > 70 ? text.slice(0, 70) + '…' : text;
+      showToast('💬 ' + name + ': ' + preview);
+      playChatNotificationSound();
     }
     return b;
   }
