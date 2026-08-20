@@ -437,7 +437,11 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     const canWhiteboard = isHost || allowGuestWhiteboard;
     const canScreenShare = isHost || allowGuestScreenShare;
 
-    wbBtn.style.display = (mediaStarted && canWhiteboard) ? '' : 'none';
+    // A lousa é independente da câmera/microfone — sempre disponível
+    // (respeitando a permissão), mesmo se a câmera falhar ou a pessoa não
+    // tiver microfone. Só o compartilhar tela depende de mídia iniciada,
+    // porque ele troca a faixa de vídeo da própria chamada.
+    wbBtn.style.display = canWhiteboard ? '' : 'none';
     ssBtn.style.display = (mediaStarted && canScreenShare) ? '' : 'none';
 
     // Se a permissão for revogada no meio da reunião, encerra o que o
@@ -596,6 +600,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       document.getElementById('chatFab').classList.add('show');
       document.getElementById('btnEnableAudio').style.display = '';
       renderParticipantsList();
+      applyGuestPermissionsUI(); // Lousa já aparece aqui, mesmo antes da câmera iniciar
 
       if(!isHost){
         // Bootstrap: the only peer id a newcomer knows in advance is the host's.
@@ -939,15 +944,19 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       // celulares Android o padrão do fabricante é mais fraco — pedir
       // explícito ajuda bastante o reconhecimento de voz a captar a fala
       // com menos ruído de fundo.
-      localStream = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-          channelCount: 1,
-        },
-      });
+      try{
+        localStream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 },
+        });
+      }catch(innerErr){
+        // Alguns aparelhos/navegadores recusam essas configurações de
+        // áudio mais específicas (ex: microfone que só grava em estéreo).
+        // Em vez de travar a pessoa fora da reunião, tenta de novo do jeito
+        // simples antes de desistir de verdade.
+        console.warn('getUserMedia com áudio avançado falhou, tentando modo simples:', innerErr);
+        localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      }
       mediaStarted = true;
       addVideoFeed(myPeerId, myName + ' (Você)', localStream, true);
       document.getElementById('btnStartMedia').style.display = 'none';
@@ -988,7 +997,6 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       // de outro aparelho, produtos, etc. Só faz sentido no celular — no PC
       // "frontal/traseira" não existe, então o botão fica escondido lá
       // mesmo que o Windows liste duas webcams.
-      const isMobileDevice = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
       if(isMobileDevice && navigator.mediaDevices.enumerateDevices){
         navigator.mediaDevices.enumerateDevices().then(devices => {
           const cameraCount = devices.filter(d => d.kind === 'videoinput').length;
@@ -997,7 +1005,13 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       }
     } catch(e) {
       document.getElementById('btnStartMedia').style.display = '';
-      showToast('Autorize a câmera e o microfone nas configurações do seu navegador e toque em "Tentar novamente".');
+      // Mostra o motivo real (ex: "NotAllowedError" = permissão negada,
+      // "NotReadableError" = câmera em uso por outro app/aba,
+      // "NotFoundError" = não achou câmera/microfone no aparelho) — isso
+      // ajuda a diagnosticar na hora em vez de tentar adivinhar depois.
+      console.error('Falha ao iniciar câmera/microfone:', e);
+      const reason = e && e.name ? ` (${e.name})` : '';
+      showToast('Não consegui acessar câmera/microfone' + reason + '. Autorize nas configurações do navegador e toque em "Tentar novamente".');
     }
   }
   document.getElementById('btnStartMedia').addEventListener('click', startMedia);
