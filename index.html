@@ -214,7 +214,10 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
         <button class="tool-btn" id="btnFlipCamera" style="display:none;">🔄 Trocar câmera</button>
         <button class="tool-btn" id="btnScreenShare" style="display:none;">🖥️ Compartilhar tela</button>
         <button class="tool-btn" id="btnEnableAudio" style="display:none;">🔊 Ativar áudio</button>
-        <button class="tool-btn" id="btnWhiteboard">✏️ Lousa</button>
+        <button class="tool-btn" id="btnWhiteboard" style="display:none;">✏️ Lousa</button>
+        <button class="tool-btn" id="btnRecord" style="display:none;">⏺️ Gravar</button>
+        <button class="tool-btn" id="btnToggleWbPermission" style="display:none;">🔒 Lousa p/ todos</button>
+        <button class="tool-btn" id="btnToggleScreenPermission" style="display:none;">🔒 Tela p/ todos</button>
         </div>
     </div>
 
@@ -366,6 +369,10 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
   let myPeerId = '';
   let hostPeerId = '';
   let isHost = false;
+  // Lousa e compartilhar tela ficam bloqueados para convidados por padrão —
+  // só o anfitrião pode liberar, um por um, durante a reunião.
+  let allowGuestWhiteboard = false;
+  let allowGuestScreenShare = false;
   let micEnabled = true;
   let camEnabled = true;
   let isScreenSharing = false;
@@ -415,6 +422,42 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     if(toastTimer) clearTimeout(toastTimer);
     toastTimer = setTimeout(()=>t.classList.remove('show'), 3200);
   }
+
+  /* ---- controle do anfitrião sobre lousa e compartilhar tela dos convidados ---- */
+  function applyGuestPermissionsUI(){
+    const wbBtn = document.getElementById('btnWhiteboard');
+    const ssBtn = document.getElementById('btnScreenShare');
+    // O anfitrião sempre pode usar os dois; convidados só se liberado.
+    const canWhiteboard = isHost || allowGuestWhiteboard;
+    const canScreenShare = isHost || allowGuestScreenShare;
+
+    wbBtn.style.display = (mediaStarted && canWhiteboard) ? '' : 'none';
+    ssBtn.style.display = (mediaStarted && canScreenShare) ? '' : 'none';
+
+    // Se a permissão for revogada no meio da reunião, encerra o que o
+    // convidado estava usando em vez de deixar travado sem acesso ao botão.
+    if(!isHost){
+      if(!canWhiteboard && wbOpenState) setWhiteboardOpen(false, true);
+      if(!canScreenShare && isScreenSharing) stopScreenShare();
+    }
+  }
+
+  function broadcastPermissions(){
+    broadcastAll({ type: 'permissions', allowWhiteboard: allowGuestWhiteboard, allowScreenShare: allowGuestScreenShare });
+  }
+
+  document.getElementById('btnToggleWbPermission').addEventListener('click', () => {
+    allowGuestWhiteboard = !allowGuestWhiteboard;
+    document.getElementById('btnToggleWbPermission').textContent = allowGuestWhiteboard ? '🔓 Lousa liberada' : '🔒 Lousa p/ todos';
+    document.getElementById('btnToggleWbPermission').classList.toggle('active', allowGuestWhiteboard);
+    broadcastPermissions();
+  });
+  document.getElementById('btnToggleScreenPermission').addEventListener('click', () => {
+    allowGuestScreenShare = !allowGuestScreenShare;
+    document.getElementById('btnToggleScreenPermission').textContent = allowGuestScreenShare ? '🔓 Tela liberada' : '🔒 Tela p/ todos';
+    document.getElementById('btnToggleScreenPermission').classList.toggle('active', allowGuestScreenShare);
+    broadcastPermissions();
+  });
 
   /* ================= Entry ================= */
   // Legendas automáticas dependem do reconhecimento de voz do navegador, que
@@ -658,7 +701,7 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     conn.on('open', () => {
       conn.send({ type: 'identity', name: myName, peerId: myPeerId, isHost: isHost });
       if(isHost){
-        conn.send({ type: 'roster', participants: getRosterList(), wbShapes: wbShapes });
+        conn.send({ type: 'roster', participants: getRosterList(), wbShapes: wbShapes, allowWhiteboard: allowGuestWhiteboard, allowScreenShare: allowGuestScreenShare });
       }
       // Only the side that opened this data connection also places the media
       // call — the other side just answers. If both sides called each other
@@ -700,7 +743,23 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
           wbShapes = data.wbShapes;
           redrawWhiteboard();
         }
+        if(!isHost){
+          allowGuestWhiteboard = !!data.allowWhiteboard;
+          allowGuestScreenShare = !!data.allowScreenShare;
+          applyGuestPermissionsUI();
+        }
         renderParticipantsList();
+        break;
+
+      case 'permissions':
+        if(!isHost){
+          allowGuestWhiteboard = !!data.allowWhiteboard;
+          allowGuestScreenShare = !!data.allowScreenShare;
+          applyGuestPermissionsUI();
+          showToast(allowGuestWhiteboard || allowGuestScreenShare
+            ? 'O anfitrião liberou novas opções para você.'
+            : 'O anfitrião ajustou as permissões da sala.');
+        }
         break;
 
       case 'peer-joined':
@@ -854,8 +913,14 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       document.getElementById('btnStartMedia').style.display = 'none';
       document.getElementById('btnToggleMic').style.display = '';
       document.getElementById('btnToggleCam').style.display = '';
-      document.getElementById('btnScreenShare').style.display = '';
       document.getElementById('btnEnableAudio').style.display = '';
+      applyGuestPermissionsUI(); // mostra Lousa/Compartilhar tela conforme permissão
+
+      if(isHost){
+        document.getElementById('btnRecord').style.display = '';
+        document.getElementById('btnToggleWbPermission').style.display = '';
+        document.getElementById('btnToggleScreenPermission').style.display = '';
+      }
 
       // Recover connections that were answered before we had media (they'd
       // never receive our video/audio otherwise), and call anyone we have a
@@ -880,8 +945,11 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
       // frontal/traseira — útil especialmente no iPhone, onde o Safari não
       // permite compartilhar a tela de dentro do navegador; a câmera
       // traseira funciona como alternativa para mostrar documentos, telas
-      // de outro aparelho, produtos, etc.
-      if(navigator.mediaDevices.enumerateDevices){
+      // de outro aparelho, produtos, etc. Só faz sentido no celular — no PC
+      // "frontal/traseira" não existe, então o botão fica escondido lá
+      // mesmo que o Windows liste duas webcams.
+      const isMobileDevice = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+      if(isMobileDevice && navigator.mediaDevices.enumerateDevices){
         navigator.mediaDevices.enumerateDevices().then(devices => {
           const cameraCount = devices.filter(d => d.kind === 'videoinput').length;
           if(cameraCount > 1) document.getElementById('btnFlipCamera').style.display = '';
@@ -919,6 +987,93 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     }
   });
 
+  /* ---- gravar reunião (somente anfitrião) ----
+     Grava a própria aba do navegador (vídeo + áudio) usando as APIs nativas
+     do Chrome/Edge/Firefox — sem precisar de servidor. Ao parar, o arquivo
+     é baixado automaticamente para o computador do anfitrião ("local"). Se
+     ele quiser guardar na nuvem, é só arrastar o arquivo baixado para o
+     Google Drive/Dropbox depois — subir automático pra nuvem exigiria um
+     servidor de armazenamento próprio, que não está incluído nesta versão.
+     Funciona em navegador de computador; iPhone/Android não suportam
+     gravar a aba pelo navegador. */
+  let mediaRecorder = null;
+  let recordingChunks = [];
+  let isRecording = false;
+  let recordingStream = null;
+
+  document.getElementById('btnRecord').addEventListener('click', () => {
+    if(!isHost) return;
+    if(isRecording){ stopRecording(); return; }
+    startRecording();
+  });
+
+  async function startRecording(){
+    if(!navigator.mediaDevices.getDisplayMedia){
+      showToast('Gravação não é suportada neste navegador/aparelho. Funciona em Chrome, Edge ou Firefox no computador.');
+      return;
+    }
+    try{
+      recordingStream = await navigator.mediaDevices.getDisplayMedia({
+        video: true,
+        audio: true,
+        preferCurrentTab: true, // Chrome/Edge: já sugere "Esta guia" na caixa de seleção
+      });
+    }catch(e){
+      return; // pessoa cancelou a caixa de seleção — nada a fazer
+    }
+
+    showToast('Na caixa que abriu, escolha "Esta guia" (ou "This Tab") e marque "Compartilhar áudio da guia" para gravar a reunião completa.');
+
+    recordingChunks = [];
+    const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')
+      ? 'video/webm;codecs=vp9,opus'
+      : 'video/webm';
+    try{
+      mediaRecorder = new MediaRecorder(recordingStream, { mimeType });
+    }catch(e){
+      showToast('Não foi possível iniciar a gravação neste navegador.');
+      recordingStream.getTracks().forEach(t => t.stop());
+      recordingStream = null;
+      return;
+    }
+    mediaRecorder.ondataavailable = (e) => { if(e.data && e.data.size > 0) recordingChunks.push(e.data); };
+    mediaRecorder.onstop = () => {
+      const blob = new Blob(recordingChunks, { type: 'video/webm' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      a.href = url;
+      a.download = `reuniao-${roomCode || 'sala'}-${stamp}.webm`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+      showToast('Gravação salva no seu computador (pasta de Downloads).');
+    };
+
+    // Se a pessoa clicar em "Parar de compartilhar" na própria barra do
+    // navegador, encerra a gravação também (senão ela fica gravando uma
+    // aba que já não existe mais).
+    recordingStream.getVideoTracks()[0].onended = () => { if(isRecording) stopRecording(); };
+
+    mediaRecorder.start(1000);
+    isRecording = true;
+    const btn = document.getElementById('btnRecord');
+    btn.textContent = '🛑 Parar gravação';
+    btn.classList.add('active');
+    broadcastAll({ type: 'recording-state', active: true });
+  }
+
+  function stopRecording(){
+    if(mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+    if(recordingStream){ recordingStream.getTracks().forEach(t => t.stop()); recordingStream = null; }
+    isRecording = false;
+    const btn = document.getElementById('btnRecord');
+    btn.textContent = '⏺️ Gravar';
+    btn.classList.remove('active');
+    broadcastAll({ type: 'recording-state', active: false });
+  }
+
   document.getElementById('btnToggleMic').addEventListener('click', () => {
     if(!localStream) return;
     micEnabled = !micEnabled;
@@ -949,6 +1104,10 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
 
   /* ---- screen sharing (swaps the outgoing video track on every call) ---- */
   document.getElementById('btnScreenShare').addEventListener('click', async () => {
+    if(!isHost && !allowGuestScreenShare){
+      showToast('O anfitrião precisa liberar o compartilhamento de tela primeiro.');
+      return;
+    }
     if(!isScreenSharing){
       if(presentingPeerId && presentingPeerId !== myPeerId){
         showToast(peerNameFor(presentingPeerId) + ' já está compartilhando a tela.');
@@ -1196,6 +1355,17 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
     document.getElementById('btnFlipCamera').style.display = 'none';
     document.getElementById('btnScreenShare').style.display = 'none';
     document.getElementById('btnEnableAudio').style.display = 'none';
+    document.getElementById('btnWhiteboard').style.display = 'none';
+    document.getElementById('btnRecord').style.display = 'none';
+    document.getElementById('btnToggleWbPermission').style.display = 'none';
+    document.getElementById('btnToggleScreenPermission').style.display = 'none';
+    document.getElementById('btnToggleWbPermission').textContent = '🔒 Lousa p/ todos';
+    document.getElementById('btnToggleWbPermission').classList.remove('active');
+    document.getElementById('btnToggleScreenPermission').textContent = '🔒 Tela p/ todos';
+    document.getElementById('btnToggleScreenPermission').classList.remove('active');
+    allowGuestWhiteboard = false;
+    allowGuestScreenShare = false;
+    if(isRecording) stopRecording();
     for(const k in participants) delete participants[k];
     for(const k in activeConns) delete activeConns[k];
     for(const k in activeCalls) delete activeCalls[k];
@@ -1346,6 +1516,10 @@ select { background: #000; color: #fff; border: 1px solid var(--border); padding
   // switches the view for the whole room, like screen sharing does.
 
   document.getElementById('btnWhiteboard').addEventListener('click', ()=>{
+    if(!isHost && !allowGuestWhiteboard){
+      showToast('O anfitrião precisa liberar a lousa primeiro.');
+      return;
+    }
     setWhiteboardOpen(!wbOpenState, true);
   });
   document.getElementById('wbClose').addEventListener('click', ()=> setWhiteboardOpen(false, true));
